@@ -1,1 +1,1 @@
-web gunicorn bilancio:wsgi
+web gunicorn bilancio\parse_excel:app
