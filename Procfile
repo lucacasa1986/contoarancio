@@ -1,1 +1,1 @@
-web gunicorn bilancio\parse_excel:app
+web gunicorn bilancio.parse_excel:app
