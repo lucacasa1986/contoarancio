@@ -14,7 +14,7 @@ app = Flask(__name__)
 app.config.from_object(__name__)
 
 app.config.update(dict(
-    DATABASE=os.path.join('bilancio/flaskr.db'),
+    DATABASE='flaskr.db',
     SECRET_KEY='development key',
     USERNAME='admin',
     PASSWORD='default',
