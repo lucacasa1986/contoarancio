@@ -37,18 +37,6 @@ create table movimenti
 )
 ;
 
-create table movimento_tags
-(
-	id INTEGER
-		primary key
-		 autoincrement,
-	movimento_id INT not null
-		constraint movimento_tags_movimenti_id_fk
-			references movimenti,
-	tag_id INT not null
-)
-;
-
 create table tags
 (
 	id INTEGER
@@ -59,8 +47,15 @@ create table tags
 )
 ;
 
-alter table movimento_tags
-	add constraint movimento_tags_tags_id_fk
-		foreign key (tag_id) references tags
+create table movimento_tags
+(
+	id INTEGER
+		primary key
+		 autoincrement,
+	movimento_id INT not null
+		constraint movimento_tags_movimenti_id_fk
+			references movimenti,
+	tag_id INT not null CONSTRAINT movimento_tags_tags_id_fk REFERENCES tags
+)
 ;
 
