@@ -15,6 +15,10 @@ import { TabComponent } from './tabs/tab/tab.component';
 import { TabsComponent } from './tabs/tabs/tabs.component';
 import { UploaderComponent } from './movimenti/uploader/uploader.component';
 import { TagService } from './tag.service';
+import { ListaContiComponent } from './conti/lista-conti/lista-conti.component';
+import { AppRoutingModule } from './app-routing/app-routing.module';
+import { ContoComponent } from './conti/conto/conto.component';
+import { ContoEditComponent } from './conti/conto-edit/conto-edit.component';
 
 
 @NgModule({
@@ -24,10 +28,13 @@ import { TagService } from './tag.service';
     MovimentoComponent,
     TabComponent,
     TabsComponent,
-    UploaderComponent
+    UploaderComponent,
+    ListaContiComponent,
+    ContoComponent,
+    ContoEditComponent
   ],
   imports: [
-    BrowserModule, FormsModule, HttpClientModule, NgbModule.forRoot(), TagInputModule, BrowserAnimationsModule, ReactiveFormsModule
+    BrowserModule, FormsModule, HttpClientModule, NgbModule.forRoot(), TagInputModule, BrowserAnimationsModule, ReactiveFormsModule, AppRoutingModule
   ],
   providers: [MovimentoServiceService, TagService],
   bootstrap: [AppComponent]

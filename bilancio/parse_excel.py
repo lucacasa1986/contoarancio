@@ -114,7 +114,8 @@ def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-def parse_movimenti_conto(sheet):
+
+def parse_movimenti_conto(conto_id, sheet):
     movimenti = []
     db = get_db()
     for rowindex in range(1, sheet.nrows):
@@ -136,11 +137,11 @@ def parse_movimenti_conto(sheet):
         if not rec:
             cursor = db.cursor()
             cursor.execute("""
-                      INSERT INTO movimenti (tipo, descrizione, data_movimento, importo, row_hash) VALUES (?, ?, ?, ?, ?)
+                      INSERT INTO movimenti (tipo, descrizione, data_movimento, importo, row_hash, conto_id) VALUES (?, ?, ?, ?, ?, ?)
                       """,
                            [movimento.type, movimento.description,
                             movimento.date, movimento.amount,
-                            movimento.row_hash])
+                            movimento.row_hash, conto_id])
             movimento.id = cursor.lastrowid
             movimenti.append(movimento)
         else:
@@ -149,7 +150,7 @@ def parse_movimenti_conto(sheet):
     return movimenti
 
 
-def parse_movimenti_carta(sheet):
+def parse_movimenti_carta(conto_id, sheet):
     movimenti = []
     db = get_db()
     for rowindex in range(1, sheet.nrows - 1):
@@ -171,11 +172,11 @@ def parse_movimenti_carta(sheet):
         if not rec:
             cursor = db.cursor()
             cursor.execute("""
-                          INSERT INTO movimenti (tipo, descrizione, data_movimento, importo, row_hash) VALUES (?, ?, ?, ?, ?)
+                          INSERT INTO movimenti (tipo, descrizione, data_movimento, importo, row_hash, conto_id) VALUES (?, ?, ?, ?, ?, ?)
                           """,
                            [movimento.type, movimento.description,
                             movimento.date, movimento.amount,
-                            movimento.row_hash])
+                            movimento.row_hash, conto_id])
             movimento.id = cursor.lastrowid
             movimenti.append(movimento)
         else:
@@ -184,8 +185,8 @@ def parse_movimenti_carta(sheet):
     return movimenti
 
 
-@app.route("/api/parse", methods=['POST'])
-def parse_file():
+@app.route("/api/parse/<conto_id>", methods=['POST'])
+def parse_file(conto_id):
 
     if 'excel_file' not in request.files:
         flash('No file part')
@@ -206,15 +207,40 @@ def parse_file():
         tipo_movimenti = request.args.get('type')
 
         if not tipo_movimenti or tipo_movimenti == 'CONTO':
-            movimenti = parse_movimenti_conto(sheet)
+            movimenti = parse_movimenti_conto(conto_id, sheet)
         elif tipo_movimenti == 'CARTA':
-            movimenti = parse_movimenti_carta(sheet)
+            movimenti = parse_movimenti_carta(conto_id, sheet)
 
         return jsonify([ m.__dict__ for m in movimenti])
 
+@app.route("/api/conti", methods=['GET'])
+def get_lista_conti():
+    db = get_db()
+    select = """
+        select id,
+        titolare,
+        descrizione
+        from conti
+    """
+    cur = db.execute(select)
+    entries = cur.fetchall()
+    return jsonify([dict(e) for e in entries])
 
-@app.route("/api", methods=['GET'])
-def get_movimenti():
+@app.route('/api/conto', methods=['POST'])
+def crea_conto():
+    conto = request.get_json(force=True)
+
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute("""
+                  INSERT INTO conti(titolare,descrizione) VALUES (?,?)
+                        """,
+                   [conto["titolare"], conto["descrizione"]])
+    db.commit()
+    return str(cursor.lastrowid)
+
+@app.route("/api/<conto_id>", methods=['GET'])
+def get_movimenti(conto_id):
     db = get_db()
     from_date_param = request.args.get('from_date')
     to_date_param = request.args.get('to_date')
@@ -230,7 +256,7 @@ def get_movimenti():
     else:
         to_date = datetime.now()
 
-    params = [from_date, to_date]
+    params = [from_date, to_date, conto_id]
 
     select = """
         select id,
@@ -240,7 +266,7 @@ def get_movimenti():
         importo,
         row_hash,
         categoria_id
-        from movimenti where data_movimento between ? and ?
+        from movimenti where data_movimento between ? and ? and conto_id = ?
     """
 
     if categories:

@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, Input } from '@angular/core';
 import { MovimentoServiceService } from '../movimento-service.service';
 
 @Component({
@@ -13,6 +13,8 @@ export class UploaderComponent implements OnInit {
   showSuccessAlert:Boolean = false;
   showErrorAlert:Boolean = false;
 
+  @Input() idConto:number;
+
   constructor(private _service:MovimentoServiceService) { }
 
   ngOnInit() {
@@ -23,7 +25,7 @@ export class UploaderComponent implements OnInit {
   }
 
   uploadFileToActivity() {
-    this._service.uploadFile(this.fileToUpload, this.fileType).subscribe(data => {
+    this._service.uploadFile(this.idConto, this.fileToUpload, this.fileType).subscribe(data => {
       // do something, if upload success
         this.showSuccessAlert = true;
         setTimeout(() => {

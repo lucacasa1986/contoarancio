@@ -7,7 +7,20 @@ export class MovimentoServiceService {
 
   constructor(private http:HttpClient) { }
 
-  getMovements(dateFrom: Date, dateTo:Date, selectedCategories:Array<{}>) {
+  getConti() {
+    return this.http.get("/api/conti");
+  }
+
+  creaNuovoConto(titolare:string, descrizione:string) {
+    let body = {
+      "titolare": titolare,
+      "descrizione": descrizione
+    };
+
+    return this.http.post('/api/conto', body);
+  }
+
+  getMovements(dateFrom: Date, dateTo:Date, contoId: number, selectedCategories:Array<{}>) {
     let params = {
       from_date: this.formatDate(dateFrom),
       to_date:  this.formatDate(dateTo)
@@ -18,7 +31,7 @@ export class MovimentoServiceService {
         return category["id"];
       });
     }
-    return this.http.get("/api", {
+    return this.http.get("/api/"+contoId, {
       params: params
     });
   }
@@ -35,9 +48,9 @@ export class MovimentoServiceService {
     return this.http.put("/api/movimento", movimento);
   }
 
-  uploadFile(file:File, type:string)
+  uploadFile(idConto:number,file:File, type:string)
   {
-    const endpoint = '/api/parse';
+    const endpoint = '/api/parse/'+idConto;
     const formData: FormData = new FormData();
     formData.append('excel_file', file, file.name);
     formData.append('type', type);

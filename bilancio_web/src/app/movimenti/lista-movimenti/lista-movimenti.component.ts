@@ -1,4 +1,4 @@
-import { Component, OnInit, AfterContentInit, AfterViewInit, Injectable } from '@angular/core';
+import { Component, OnInit, AfterContentInit, AfterViewInit, Injectable, Input } from '@angular/core';
 import { Movimento } from '../movimento.model';
 import { MovimentoServiceService } from '../movimento-service.service';
 import { Chart } from 'chart.js';
@@ -24,6 +24,8 @@ export class NgbDateNativeAdapter extends NgbDateAdapter<Date> {
   providers: [{provide: NgbDateAdapter, useClass: NgbDateNativeAdapter}]
 })
 export class ListaMovimentiComponent implements OnInit, AfterContentInit {
+
+  @Input() idConto: number;
 
   dateFrom: Date = new Date();
   dateTo: Date = new Date();
@@ -96,7 +98,7 @@ export class ListaMovimentiComponent implements OnInit, AfterContentInit {
   }
 
   getMovimenti() {
-    this._service.getMovements(this.dateFrom, this.dateTo, this.getSelectedCategories()).subscribe(
+    this._service.getMovements(this.dateFrom, this.dateTo, this.idConto, this.getSelectedCategories()).subscribe(
       data => { 
         let lista_movimenti = data as Object[];
         this.movimenti.length = 0;
