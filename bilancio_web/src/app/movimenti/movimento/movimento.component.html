@@ -1,0 +1,44 @@
+<a class="list-group-item clearfix" >
+  <div class="row">
+    <div class="col-2">
+      <div ngbDropdown class="d-inline-block">
+        <button class="btn btn-outline-primary" id="categoryDropdown" ngbDropdownToggle>
+          <span [class]="getCategoriaIcon()" [ngStyle]="{ color: getCategoriaColoreById() }" style="margin-right: 20px"  placement="top" [ngbTooltip]="getCategoriaDescription()"></span>
+        </button>
+        <div ngbDropdownMenu aria-labelledby="categoryDropdown">
+          <button class="dropdown-item pointer" *ngFor="let categoria of categorie" (click)="cambiaCategoria(categoria)">
+              <span [class]="categoria.icon_class" [ngStyle]="{ color: categoria.colore }"></span> {{categoria.descrizione}}
+          </button>
+        </div>
+      </div>
+    </div>
+    <div class="col-4 pointer" (click)="isVisible = !isVisible"  >
+      <h4 style="margin: 0px">{{movimento.type}}</h4>
+    </div>
+    <div class="col-4 pointer" (click)="isVisible = !isVisible">
+      <h5>{{ movimento.data_movimento | date}}</h5>
+    </div>
+    <div class="col-2 pointer" (click)="isVisible = !isVisible">
+      <h5 class="text-right importo">{{ movimento.getAbsAmount()}}</h5>
+    </div>
+  </div>
+</a>
+<div *ngIf="isVisible" class="p-3">
+  <div class="row">
+    <div class="col">
+      <p class="list-group-item-text">{{movimento.description}}</p>
+    </div>
+    <div class="col">
+        <tag-input [(ngModel)]='taggedSubcategories' 
+                   [placeholder]="'Inserisci un altro tag'" 
+                   [secondaryPlaceholder]="'Inserisci tag'"
+                   (onAdd)="addTag($event)"
+                   (onRemove)="removeTag($event)">
+            <tag-input-dropdown [showDropdownIfEmpty]="true"
+              [autocompleteItems]="subcategories">
+            </tag-input-dropdown>
+        </tag-input>
+    </div>
+      
+  </div>
+</div>

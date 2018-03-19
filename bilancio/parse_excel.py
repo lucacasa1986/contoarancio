@@ -310,3 +310,52 @@ def add_category():
                        [category["descrizione"], category["colore"]])
     db.commit()
     return id or str(cursor.lastrowid)
+
+@app.route("/api/tags", methods=['GET'])
+def get_all_tags():
+    db = get_db()
+    cur = db.execute('select id, value, name from tags')
+    entries = cur.fetchall()
+    return jsonify([dict(e) for e in entries])
+
+@app.route('/api/tag/<movimento_id>', methods=['GET'])
+def get_tag_for_movimento(movimento_id):
+    db = get_db()
+    cur = db.execute("""
+        select t.value, t.name
+        from tags t join movimento_tags mt on mt.tag_id = t.id
+        and mt.movimento_id = ?
+        """, [movimento_id])
+    entries = cur.fetchall()
+    return jsonify([dict(e) for e in entries])
+
+@app.route('/api/tag/<movimento_id>/<tag_value>', methods=['PUT'])
+def add_tag(movimento_id, tag_value):
+    db = get_db()
+    cur = db.execute(
+        'select id from tags where value = ?',
+        [tag_value]);
+    tags = cur.fetchall()
+    if tags:
+        tag_id = tags[0]['id']
+    else:
+        cur = db.execute(
+            'insert into tags(value, name) values (?,?)',
+            [tag_value, tag_value]);
+        tag_id=cur.lastrowid
+    cur = db.execute('insert into movimento_tags(movimento_id, tag_id) values (?,?)', [movimento_id, tag_id]);
+    db.commit()
+    return 'OK'
+
+@app.route('/api/tag/<movimento_id>/<tag_value>', methods=['DELETE'])
+def remove_tag(movimento_id, tag_value):
+    db = get_db()
+    cur = db.execute(
+        'select id from tags where value = ?',
+        [tag_value]);
+    tags = cur.fetchall()
+    if tags:
+        tag_id = tags[0]['id']
+        cur = db.execute('delete from movimento_tags where movimento_id = ? and tag_id = ?', [movimento_id, tag_id]);
+        db.commit()
+    return 'OK'

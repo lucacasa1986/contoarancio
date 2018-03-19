@@ -1,0 +1,41 @@
+
+<div class="row">
+    <div class="col">
+            <form name="uploadForm" class="form-inline">
+                    <div class="form-group mb-2 mr-sm-2">
+                        <input type="file" class="form-control-file mb-2 mr-sm-2"
+                            id="file"
+                            (change)="handleFileInput($event.target.files)">
+                    </div>
+                    <div class="form-check form-check-inline mb-2 mr-sm-2">
+                        <input class="form-check-input" type="radio" name="typeradiogroup" id="inlineRadio1" value="CONTO" [(ngModel)]="fileType">
+                        <label class="form-check-label" for="inlineRadio1">Conto</label>
+                    </div>
+                    <div class="form-check form-check-inline mb-2 mr-sm-2">
+                        <input class="form-check-input" type="radio" name="typeradiogroup" id="inlineRadio2" value="CARTA" [(ngModel)]="fileType">
+                        <label class="form-check-label" for="inlineRadio2">Carta</label>
+                    </div>
+                    <div class="form-group mb-2 mr-sm-2">
+                        <button class="btn btn-success mb-2 mr-sm-2" (click)="uploadFileToActivity()">Carica movimenti</button>
+                    </div>
+            </form>
+    </div>
+    
+    <!--<div class="col-sm-6 form-group">
+        <label for="file">Choose File</label>
+        <input type="file" class="form-control"
+           id="file"
+           (change)="handleFileInput($event.target.files)">
+    </div>-->
+
+</div>
+<div class="row" *ngIf="showSuccessAlert">
+    <div class="alert alert-success">
+        <strong>Movimenti caricati!</strong>
+    </div>
+</div>
+<div class="row" *ngIf="showErrorAlert">
+    <div class="alert alert-danger">
+        <strong>Errore</strong> Movimenti non importati. Verificare il file excel con i movimenti
+    </div>
+</div>
