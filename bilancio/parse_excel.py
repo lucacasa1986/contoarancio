@@ -52,6 +52,7 @@ class Movimento(object):
 
 def connect_db():
     """Connects to sqlite database."""
+    print(app.config['DATABASE'])
     rv = sqlite3.connect(app.config['DATABASE'])
     rv.row_factory = sqlite3.Row
     return rv
