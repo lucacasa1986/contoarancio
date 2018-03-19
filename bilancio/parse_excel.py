@@ -385,3 +385,6 @@ def remove_tag(movimento_id, tag_value):
         cur = db.execute('delete from movimento_tags where movimento_id = ? and tag_id = ?', [movimento_id, tag_id]);
         db.commit()
     return 'OK'
+
+if __name__ == "__main__":
+    app.run(host='0.0.0.0')
