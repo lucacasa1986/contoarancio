@@ -205,7 +205,7 @@ def parse_file(conto_id):
             filename=os.path.join(app.config['UPLOAD_FOLDER'], filename))
         sheet = res.sheet_by_index(0)
 
-        tipo_movimenti = request.args.get('type')
+        tipo_movimenti = request.form.get('type')
 
         if not tipo_movimenti or tipo_movimenti == 'CONTO':
             movimenti = parse_movimenti_conto(conto_id, sheet)
