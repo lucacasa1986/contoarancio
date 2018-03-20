@@ -7,6 +7,9 @@ import hashlib
 from flask import Flask, jsonify, request, flash, redirect, g
 from werkzeug.utils import secure_filename
 from datetime import datetime, timedelta
+import jwt, sys, traceback
+from functools import wraps
+
 
 ALLOWED_EXTENSIONS = set(['xls', 'xlsx'])
 
@@ -15,7 +18,7 @@ app.config.from_object(__name__)
 
 app.config.update(dict(
     DATABASE=os.path.join(app.root_path, 'flaskr.db'),
-    SECRET_KEY='development key',
+    SECRET_KEY='asdkasdkasdkkAKAKK(((AMcsdkasd?Zasdk2230fksadlcmSJfdk:à',
     USERNAME='admin',
     PASSWORD='default',
     UPLOAD_FOLDER=os.path.join(app.root_path, 'uploads')
@@ -52,7 +55,6 @@ class Movimento(object):
 
 def connect_db():
     """Connects to sqlite database."""
-    print(app.config['DATABASE'])
     rv = sqlite3.connect(app.config['DATABASE'])
     rv.row_factory = sqlite3.Row
     return rv
@@ -114,6 +116,72 @@ def close_db(error):
 def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+def encode_auth_token(user_id):
+    """
+    Generates the Auth Token
+    :return: string
+    """
+    try:
+        payload = {
+            'exp': datetime.utcnow() + timedelta(days=0, minutes=15),
+            'iat': datetime.utcnow(),
+            'sub': user_id
+        }
+        return jwt.encode(
+            payload,
+            app.config.get('SECRET_KEY'),
+            algorithm='HS256'
+        )
+    except Exception as e:
+        traceback.print_exc(file=sys.stdout)
+        return e
+
+
+def decode_auth_token(auth_token):
+    """
+    Decodes the auth token
+    :param auth_token:
+    :return: integer|string
+    """
+    payload = jwt.decode(auth_token, app.config.get('SECRET_KEY'))
+    return payload['sub']
+
+
+@app.route("/api/login", methods=['POST'])
+def do_login():
+    username = request.form.get("email")
+    password = request.form.get("password")
+
+    if username == 'lucacasa1986@gmail.com' and password == "NybGb28-24":
+        token = encode_auth_token(username)
+        return jsonify({
+            "token": token.decode('utf-8')
+        })
+    else:
+        return "Unauthorized", 401
+
+
+def requires_auth(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        auth_token = request.headers.get('Authorization')
+
+        if not auth_token:
+            return "Unauthorized", 401
+        try:
+            auth_token = auth_token.split(" ")[1]
+            decode_auth_token(auth_token)
+        except jwt.ExpiredSignatureError:
+            return 'Signature expired. Please log in again.', 401
+        except jwt.InvalidTokenError:
+            return 'Invalid token. Please log in again.', 401
+        except Exception:
+            return "Unauthorized", 401
+        else:
+            return f(*args, **kwargs)
+    return decorated
 
 
 def parse_movimenti_conto(conto_id, sheet):
@@ -187,6 +255,7 @@ def parse_movimenti_carta(conto_id, sheet):
 
 
 @app.route("/api/parse/<conto_id>", methods=['POST'])
+@requires_auth
 def parse_file(conto_id):
 
     if 'excel_file' not in request.files:
@@ -214,7 +283,9 @@ def parse_file(conto_id):
 
         return jsonify([ m.__dict__ for m in movimenti])
 
+
 @app.route("/api/conti", methods=['GET'])
+@requires_auth
 def get_lista_conti():
     db = get_db()
     select = """
@@ -227,7 +298,9 @@ def get_lista_conti():
     entries = cur.fetchall()
     return jsonify([dict(e) for e in entries])
 
+
 @app.route('/api/conto', methods=['POST'])
+@requires_auth
 def crea_conto():
     conto = request.get_json(force=True)
 
@@ -240,7 +313,9 @@ def crea_conto():
     db.commit()
     return str(cursor.lastrowid)
 
+
 @app.route("/api/<conto_id>", methods=['GET'])
+@requires_auth
 def get_movimenti(conto_id):
     db = get_db()
     from_date_param = request.args.get('from_date')
@@ -294,7 +369,9 @@ def get_movimenti(conto_id):
         movimenti.append(movimento)
     return jsonify([ m.__dict__ for m in movimenti])
 
+
 @app.route("/api/movimento", methods=['PUT'])
+@requires_auth
 def update_movimento():
     movimento = request.get_json(force=True)
     if not movimento.get("id"):
@@ -338,6 +415,7 @@ def add_category():
     db.commit()
     return id or str(cursor.lastrowid)
 
+
 @app.route("/api/tags", methods=['GET'])
 def get_all_tags():
     db = get_db()
@@ -345,7 +423,9 @@ def get_all_tags():
     entries = cur.fetchall()
     return jsonify([dict(e) for e in entries])
 
+
 @app.route('/api/tag/<movimento_id>', methods=['GET'])
+@requires_auth
 def get_tag_for_movimento(movimento_id):
     db = get_db()
     cur = db.execute("""
@@ -356,7 +436,9 @@ def get_tag_for_movimento(movimento_id):
     entries = cur.fetchall()
     return jsonify([dict(e) for e in entries])
 
+
 @app.route('/api/tag/<movimento_id>/<tag_value>', methods=['PUT'])
+@requires_auth
 def add_tag(movimento_id, tag_value):
     db = get_db()
     cur = db.execute(
@@ -374,7 +456,9 @@ def add_tag(movimento_id, tag_value):
     db.commit()
     return 'OK'
 
+
 @app.route('/api/tag/<movimento_id>/<tag_value>', methods=['DELETE'])
+@requires_auth
 def remove_tag(movimento_id, tag_value):
     db = get_db()
     cur = db.execute(
@@ -386,6 +470,7 @@ def remove_tag(movimento_id, tag_value):
         cur = db.execute('delete from movimento_tags where movimento_id = ? and tag_id = ?', [movimento_id, tag_id]);
         db.commit()
     return 'OK'
+
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0')
