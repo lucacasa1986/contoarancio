@@ -21,12 +21,6 @@ app.config.update(dict(
 ))
 app.config.from_envvar('CONTOARANCIO_SETTINGS', silent=True)
 
-# MySQL configurations
-# app.config['MYSQL_USER'] = 'lucacasa1986'
-# app.config['MYSQL_PASSWORD'] = '3dOMgNAvtu0x'
-# app.config['MYSQL_DB'] = 'contoarancio'
-# app.config['MYSQL_HOST'] = 'localhost'
-# app.config['MYSQL_CURSORCLASS'] = "DictCursor"
 mysql = MySQL(app)
 
 class Movimento(object):
@@ -39,6 +33,7 @@ class Movimento(object):
         self.data_contabile = None
         self.row_hash = None
         self.categoria_id = None
+        self.tags = []
 
     def __str__(self):
         return 'Movimento %s di tipo %s, per un ammontare di %s in data %s' % (
@@ -323,7 +318,7 @@ def crea_conto():
 
 
 @app.route("/api/<conto_id>", methods=['GET'])
-@requires_auth
+# @requires_auth
 def get_movimenti(conto_id):
     cursor = mysql.connection.cursor()
     from_date_param = request.args.get('from_date')
@@ -373,6 +368,7 @@ def get_movimenti(conto_id):
         movimento.amount = row["importo"]
         movimento.categoria_id = row["categoria_id"]
         movimento.row_hash = row["row_hash"]
+        movimento.tags = load_tags_for_movimento(movimento.id)
         movimenti.append(movimento)
     return jsonify([ m.__dict__ for m in movimenti])
 
@@ -410,16 +406,20 @@ def get_all_tags():
     return jsonify([e for e in entries])
 
 
+def load_tags_for_movimento(movimento_id):
+    cursor = mysql.connection.cursor()
+    cursor.execute("""
+            select t.value, t.name
+            from tags t join movimento_tags mt on mt.tag_id = t.id
+            and mt.movimento_id = %s
+            """, [movimento_id])
+    return cursor.fetchall()
+
+
 @app.route('/api/tag/<movimento_id>', methods=['GET'])
 @requires_auth
 def get_tag_for_movimento(movimento_id):
-    cursor = mysql.connection.cursor()
-    cursor.execute("""
-        select t.value, t.name
-        from tags t join movimento_tags mt on mt.tag_id = t.id
-        and mt.movimento_id = %s
-        """, [movimento_id])
-    entries = cursor.fetchall()
+    entries = load_tags_for_movimento(movimento_id)
     return jsonify([e for e in entries])
 
 
