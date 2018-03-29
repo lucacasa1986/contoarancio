@@ -247,7 +247,8 @@ def parse_movimenti_carta(conto_id, sheet):
         rec = cursor.fetchone()
         if not rec:
             cursor.execute("""
-                          INSERT INTO movimenti (tipo, descrizione, data_movimento, importo, row_hash, conto_id) VALUES (?, ?, ?, ?, ?, ?)
+                          INSERT INTO movimenti (tipo, descrizione, data_movimento, importo, row_hash, conto_id)
+                          VALUES (%s, %s, %s, %s, %s, %s)
                           """,
                            [movimento.type, movimento.description,
                             movimento.date, movimento.amount,
