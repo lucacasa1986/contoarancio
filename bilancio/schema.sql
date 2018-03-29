@@ -7,6 +7,8 @@ CREATE TABLE categorie
   icon_class  TEXT NULL
 )
   ENGINE = InnoDB;
+ALTER TABLE categorie ADD tipo TINYTEXT NULL;
+
 
 INSERT INTO categorie (id, descrizione, colore, icon_class) VALUES (1, 'Trasporti', '#EC671A', 'fa fa-plane');
 INSERT INTO categorie (id, descrizione, colore, icon_class) VALUES (2, 'Utenze', '#FF69B8', 'fa fa-bath');
@@ -26,7 +28,9 @@ INSERT INTO categorie (id, descrizione, colore, icon_class) VALUES (15, 'Patrimo
 INSERT INTO categorie (id, descrizione, colore, icon_class) VALUES (16, 'Contabilita', '#558B4E', 'fa fa-dollar');
 INSERT INTO categorie (id, descrizione, colore, icon_class) VALUES (17, 'Tasse e sanzioni', '#5E35B1', 'fa fa-legal');
 
+update categorie set tipo='OUT';
 
+INSERT INTO categorie (descrizione, colore, icon_class, tipo) VALUES ('Stipendio', '#558B4E', 'fa fa-dollar', 'IN');
 
 CREATE TABLE conti
 (
@@ -90,4 +94,5 @@ CREATE TABLE tags
 ALTER TABLE movimento_tags
   ADD CONSTRAINT movimento_tags_tags_id_fk
 FOREIGN KEY (tag_id) REFERENCES tags (id);
+
 

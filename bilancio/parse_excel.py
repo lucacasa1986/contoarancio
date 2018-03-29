@@ -351,7 +351,7 @@ def get_movimenti(conto_id):
     if categories:
         select = select + " and categoria_id in ( "
         for category_id in categories:
-            select = select + "?,"
+            select = select + "%s,"
             params.append(category_id)
         select = select[:-1] + ") "
 
