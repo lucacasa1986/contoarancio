@@ -21,6 +21,7 @@ parts/
 sdist/
 var/
 wheels/
+bilancio/config/
 *.egg-info/
 .installed.cfg
 *.egg
