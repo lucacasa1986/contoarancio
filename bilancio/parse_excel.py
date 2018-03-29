@@ -393,7 +393,7 @@ def update_movimento():
 @app.route("/api/categories", methods=['GET'])
 def get_all_categories():
     cursor = mysql.connection.cursor()
-    cursor.execute('select id, descrizione, colore, icon_class from categorie order by descrizione')
+    cursor.execute('select id, descrizione, colore, icon_class, tipo from categorie order by descrizione')
     cursor.fetchall()
     return jsonify([e for e in cursor])
 
