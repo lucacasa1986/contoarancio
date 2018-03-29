@@ -1,12 +1,12 @@
 create table categorie
 (
-	id integer
-		primary key
-		 autoincrement,
+	id int auto_increment
+		primary key,
 	descrizione text not null,
 	colore text not null,
-	icon_class TEXT
+	icon_class text null
 )
+engine=InnoDB
 ;
 
 INSERT INTO categorie (id, descrizione, colore, icon_class) VALUES (1, 'Trasporti', '#EC671A', 'fa fa-plane');
@@ -29,51 +29,44 @@ INSERT INTO categorie (id, descrizione, colore, icon_class) VALUES (17, 'Tasse e
 
 create table conti
 (
-	id INTEGER
-		primary key
-		 autoincrement,
-	titolare TEXT,
-	descrizione TEXT
+	id int auto_increment
+		primary key,
+	titolare text null,
+	descrizione text null
 )
+engine=InnoDB
 ;
 
-create table movimenti
-(
-	id INTEGER
-		primary key
-		 autoincrement,
-	tipo TEXT not null,
-	descrizione TEXT not null,
-	data_movimento TEXT not null,
-	importo REAL not null,
-	row_hash TEXT not null,
-	categoria_id INTEGER
-		references categorie,
-	conto_id INT
-		constraint movimenti_conti_id_fk
-			references conti
-)
-;
+CREATE TABLE `movimenti` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `tipo` text NOT NULL,
+  `descrizione` text NOT NULL,
+  `data_movimento` date NOT NULL,
+  `importo` double NOT NULL,
+  `row_hash` text NOT NULL,
+  `categoria_id` int(11) DEFAULT NULL,
+  `conto_id` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `movimenti_conti_id_fk` (`conto_id`),
+  KEY `movimenti_categorie_id_fk` (`categoria_id`),
+  CONSTRAINT `movimenti_categorie_id_fk` FOREIGN KEY (`categoria_id`) REFERENCES `categorie` (`id`),
+  CONSTRAINT `movimenti_conti_id_fk` FOREIGN KEY (`conto_id`) REFERENCES `conti` (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=16 DEFAULT CHARSET=latin1;
 
-create table tags
-(
-	id INTEGER
-		primary key
-		 autoincrement,
-	value TEXT not null,
-	name TEXT not null
-)
-;
+CREATE TABLE `tags` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `value` text NOT NULL,
+  `name` text NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=latin1;
 
-create table movimento_tags
-(
-	id INTEGER
-		primary key
-		 autoincrement,
-	movimento_id INT not null
-		constraint movimento_tags_movimenti_id_fk
-			references movimenti,
-	tag_id INT not null CONSTRAINT movimento_tags_tags_id_fk REFERENCES tags
-)
-;
-
+CREATE TABLE `movimento_tags` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `movimento_id` int(11) NOT NULL,
+  `tag_id` int(11) NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `movimento_tags_tags_id_fk` (`tag_id`),
+  KEY `movimento_tags_movimenti_id_fk` (`movimento_id`),
+  CONSTRAINT `movimento_tags_movimenti_id_fk` FOREIGN KEY (`movimento_id`) REFERENCES `movimenti` (`id`),
+  CONSTRAINT `movimento_tags_tags_id_fk` FOREIGN KEY (`tag_id`) REFERENCES `tags` (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=latin1;
