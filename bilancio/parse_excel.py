@@ -33,6 +33,7 @@ class Movimento(object):
         self.amount = None
         self.description = None
         self.date = None
+        self.data_contabile = None
         self.row_hash = None
         self.categoria_id = None
 
@@ -49,7 +50,7 @@ class Movimento(object):
         m.update(repr(self.type).encode('utf-8'))
         m.update(repr(self.amount).encode('utf-8'))
         m.update(repr(self.description).encode('utf-8'))
-        m.update(repr(self.date).encode('utf-8'))
+        m.update(repr(self.data_contabile).encode('utf-8'))
         self.row_hash = m.hexdigest()
 
 
@@ -192,8 +193,11 @@ def parse_movimenti_conto(conto_id, sheet):
         if not check_val:
             break
         movimento = Movimento()
-        movimento.date = xldate_as_datetime(sheet.cell_value(rowindex, 0),
+        movimento.date = xldate_as_datetime(sheet.cell_value(rowindex, 1),
                                             datemode=0)
+        movimento.data_contabile = xldate_as_datetime(sheet.cell_value(rowindex, 0),
+                                            datemode=0)
+
         movimento.type = sheet.cell_value(rowindex, 2)
         movimento.description = sheet.cell_value(rowindex, 3)
         movimento.amount = sheet.cell_value(rowindex, 4)
