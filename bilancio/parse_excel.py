@@ -2,29 +2,32 @@ import xlrd
 import xlrd.sheet
 from xlrd.xldate import xldate_as_datetime
 import os
-import sqlite3
 import hashlib
 from flask import Flask, jsonify, request, flash, redirect, g
 from werkzeug.utils import secure_filename
 from datetime import datetime, timedelta
 import jwt, sys, traceback
 from functools import wraps
-
+from flask_mysqldb import MySQL
 
 ALLOWED_EXTENSIONS = set(['xls', 'xlsx'])
 
 app = Flask(__name__)
-app.config.from_object(__name__)
+app.config.from_object('bilancio.contoarancioapp.config_app.DevelopmentConfig')
 
 app.config.update(dict(
-    DATABASE=os.path.join(app.root_path, 'flaskr.db'),
     SECRET_KEY='asdkasdkasdkkAKAKK(((AMcsdkasd?Zasdk2230fksadlcmSJfdk:à',
-    USERNAME='admin',
-    PASSWORD='default',
     UPLOAD_FOLDER=os.path.join(app.root_path, 'uploads')
 ))
-app.config.from_envvar('FLASKR_SETTINGS', silent=True)
+app.config.from_envvar('CONTOARANCIO_SETTINGS', silent=True)
 
+# MySQL configurations
+# app.config['MYSQL_USER'] = 'lucacasa1986'
+# app.config['MYSQL_PASSWORD'] = '3dOMgNAvtu0x'
+# app.config['MYSQL_DB'] = 'contoarancio'
+# app.config['MYSQL_HOST'] = 'localhost'
+# app.config['MYSQL_CURSORCLASS'] = "DictCursor"
+mysql = MySQL(app)
 
 class Movimento(object):
     def __init__(self):
@@ -56,18 +59,24 @@ class Movimento(object):
 
 def connect_db():
     """Connects to sqlite database."""
-    rv = sqlite3.connect(app.config['DATABASE'])
-    rv.row_factory = sqlite3.Row
-    return rv
+    conn = mysql.connect()
+    return conn
 
 
 def get_db():
     """Opens a new database connection if there is none yet for the
     current application context.
     """
-    if not hasattr(g, 'sqlite_db'):
-        g.sqlite_db = connect_db()
-    return g.sqlite_db
+    if not hasattr(g, 'mysql_db'):
+        g.mysql_db = connect_db()
+    return g.mysql_db
+
+
+@app.teardown_appcontext
+def close_db(error):
+    """Closes the database again at the end of the request."""
+    if hasattr(g, 'mysql_db'):
+        g.mysql_db.close()
 
 
 def init_db():
@@ -105,13 +114,6 @@ def updatedb_command():
     """Initializes the database."""
     update_db()
     print('Database updated')
-
-
-@app.teardown_appcontext
-def close_db(error):
-    """Closes the database again at the end of the request."""
-    if hasattr(g, 'sqlite_db'):
-        g.sqlite_db.close()
 
 
 def allowed_file(filename):
@@ -187,7 +189,7 @@ def requires_auth(f):
 
 def parse_movimenti_conto(conto_id, sheet):
     movimenti = []
-    db = get_db()
+    cursor = mysql.connection.cursor()
     for rowindex in range(1, sheet.nrows):
         check_val = sheet.cell_value(rowindex, 0)
         if not check_val:
@@ -204,13 +206,13 @@ def parse_movimenti_conto(conto_id, sheet):
 
         movimento.compute_hash()
 
-        cur = db.execute('select id from movimenti where row_hash = ?',
+        cursor.execute('select id from movimenti where row_hash = %s',
                          [movimento.row_hash])
-        rec = cur.fetchone()
+        rec = cursor.fetchone()
         if not rec:
-            cursor = db.cursor()
             cursor.execute("""
-                      INSERT INTO movimenti (tipo, descrizione, data_movimento, importo, row_hash, conto_id) VALUES (?, ?, ?, ?, ?, ?)
+                      INSERT INTO movimenti (tipo, descrizione, data_movimento, importo, row_hash, conto_id) 
+                      VALUES (%s, %s, %s, %s, %s, %s)
                       """,
                            [movimento.type, movimento.description,
                             movimento.date, movimento.amount,
@@ -219,13 +221,14 @@ def parse_movimenti_conto(conto_id, sheet):
             movimenti.append(movimento)
         else:
             print('Movimento già caricato')
-    db.commit()
+    mysql.connection.commit()
+    cursor.close()
     return movimenti
 
 
 def parse_movimenti_carta(conto_id, sheet):
     movimenti = []
-    db = get_db()
+    cursor = mysql.connection.cursor()
     for rowindex in range(1, sheet.nrows - 1):
         check_val = sheet.cell_value(rowindex, 0)
         if not check_val:
@@ -239,11 +242,10 @@ def parse_movimenti_carta(conto_id, sheet):
 
         movimento.compute_hash()
 
-        cur = db.execute('select id from movimenti where row_hash = ?',
+        cursor.execute('select id from movimenti where row_hash = ?',
                          [movimento.row_hash])
-        rec = cur.fetchone()
+        rec = cursor.fetchone()
         if not rec:
-            cursor = db.cursor()
             cursor.execute("""
                           INSERT INTO movimenti (tipo, descrizione, data_movimento, importo, row_hash, conto_id) VALUES (?, ?, ?, ?, ?, ?)
                           """,
@@ -254,7 +256,8 @@ def parse_movimenti_carta(conto_id, sheet):
             movimenti.append(movimento)
         else:
             print('Movimento già caricato')
-    db.commit()
+    mysql.connection.commit()
+    cursor.close()
     return movimenti
 
 
@@ -291,16 +294,16 @@ def parse_file(conto_id):
 @app.route("/api/conti", methods=['GET'])
 @requires_auth
 def get_lista_conti():
-    db = get_db()
+    cursor = mysql.connection.cursor()
     select = """
         select id,
         titolare,
         descrizione
         from conti
     """
-    cur = db.execute(select)
-    entries = cur.fetchall()
-    return jsonify([dict(e) for e in entries])
+    cursor.execute(select)
+    entries = cursor.fetchall()
+    return jsonify([e for e in entries])
 
 
 @app.route('/api/conto', methods=['POST'])
@@ -308,33 +311,33 @@ def get_lista_conti():
 def crea_conto():
     conto = request.get_json(force=True)
 
-    db = get_db()
-    cursor = db.cursor()
+    cursor = mysql.connection.cursor()
     cursor.execute("""
-                  INSERT INTO conti(titolare,descrizione) VALUES (?,?)
+                  INSERT INTO conti(titolare,descrizione) VALUES (%s,%s)
                         """,
                    [conto["titolare"], conto["descrizione"]])
-    db.commit()
+    mysql.connection.commit()
+    cursor.close()
     return str(cursor.lastrowid)
 
 
 @app.route("/api/<conto_id>", methods=['GET'])
 @requires_auth
 def get_movimenti(conto_id):
-    db = get_db()
+    cursor = mysql.connection.cursor()
     from_date_param = request.args.get('from_date')
     to_date_param = request.args.get('to_date')
     categories = request.args.getlist('category')
-    print(categories)
     if from_date_param:
-        from_date = datetime.strptime(from_date_param, '%Y-%m-%d')
+        from_date = datetime.strptime(from_date_param, '%Y-%m-%d').date()
     else:
         from_date = datetime.now() - timedelta(days=30)
+        from_date = from_date.date()
 
     if to_date_param:
-        to_date = datetime.strptime(to_date_param, '%Y-%m-%d')
+        to_date = datetime.strptime(to_date_param, '%Y-%m-%d').date()
     else:
-        to_date = datetime.now()
+        to_date = datetime.now().date()
 
     params = [from_date, to_date, conto_id]
 
@@ -346,7 +349,7 @@ def get_movimenti(conto_id):
         importo,
         row_hash,
         categoria_id
-        from movimenti where data_movimento between ? and ? and conto_id = ?
+        from movimenti where data_movimento between %s and %s and conto_id = %s
     """
 
     if categories:
@@ -357,9 +360,8 @@ def get_movimenti(conto_id):
         select = select[:-1] + ") "
 
     select = select + " order by data_movimento desc"
-
-    cur = db.execute(select,params)
-    entries = cur.fetchall()
+    cursor.execute(select, params)
+    entries = cursor.fetchall()
     movimenti = []
     for row in entries:
         movimento = Movimento()
@@ -381,98 +383,79 @@ def update_movimento():
     if not movimento.get("id"):
         return "Errore, manca id movimento"
 
-    db = get_db()
-    cursor = db.cursor()
+    cursor = mysql.connection.cursor()
     cursor.execute("""
-                      UPDATE movimenti set categoria_id = ? where id=?
+                      UPDATE movimenti set categoria_id = %s where id=%s
                     """,
                    [movimento["categoria_id"], movimento["id"]])
-    db.commit()
+    mysql.connection.commit()
+    cursor.close()
     return str(movimento.get("id"))
 
 
 @app.route("/api/categories", methods=['GET'])
 def get_all_categories():
-    db = get_db()
-    cur = db.execute('select id, descrizione, colore, icon_class from categorie order by descrizione')
-    entries = cur.fetchall()
-    return jsonify([dict(e) for e in entries])
-
-
-@app.route("/api/categories", methods=['POST'])
-def add_category():
-    category = request.get_json(force=True)
-    id = category.get("id")
-    db = get_db()
-    cursor = db.cursor()
-    if id:
-        # update
-        cursor.execute("""
-                      update categorie set descrizione=?, colore = ? where id = ?
-                       """,
-                       [category["descrizione"], category["colore"], category["id"]])
-    else:
-        cursor.execute("""
-                       INSERT INTO categorie (descrizione, colore) VALUES (?, ?)
-                       """,
-                       [category["descrizione"], category["colore"]])
-    db.commit()
-    return id or str(cursor.lastrowid)
+    cursor = mysql.connection.cursor()
+    cursor.execute('select id, descrizione, colore, icon_class from categorie order by descrizione')
+    cursor.fetchall()
+    return jsonify([e for e in cursor])
 
 
 @app.route("/api/tags", methods=['GET'])
 def get_all_tags():
-    db = get_db()
-    cur = db.execute('select id, value, name from tags')
-    entries = cur.fetchall()
-    return jsonify([dict(e) for e in entries])
+    cursor = mysql.connection.cursor()
+    cursor.execute('select id, value, name from tags')
+    entries = cursor.fetchall()
+    return jsonify([e for e in entries])
 
 
 @app.route('/api/tag/<movimento_id>', methods=['GET'])
 @requires_auth
 def get_tag_for_movimento(movimento_id):
-    db = get_db()
-    cur = db.execute("""
+    cursor = mysql.connection.cursor()
+    cursor.execute("""
         select t.value, t.name
         from tags t join movimento_tags mt on mt.tag_id = t.id
-        and mt.movimento_id = ?
+        and mt.movimento_id = %s
         """, [movimento_id])
-    entries = cur.fetchall()
-    return jsonify([dict(e) for e in entries])
+    entries = cursor.fetchall()
+    return jsonify([e for e in entries])
 
 
 @app.route('/api/tag/<movimento_id>/<tag_value>', methods=['PUT'])
 @requires_auth
 def add_tag(movimento_id, tag_value):
-    db = get_db()
-    cur = db.execute(
-        'select id from tags where value = ?',
+    cursor = mysql.connection.cursor()
+    cursor.execute(
+        'select id from tags where value = %s',
         [tag_value]);
-    tags = cur.fetchall()
+    tags = cursor.fetchall()
     if tags:
         tag_id = tags[0]['id']
     else:
-        cur = db.execute(
-            'insert into tags(value, name) values (?,?)',
+        cursor.execute(
+            'insert into tags(value, name) values (%s,%s)',
             [tag_value, tag_value]);
-        tag_id=cur.lastrowid
-    cur = db.execute('insert into movimento_tags(movimento_id, tag_id) values (?,?)', [movimento_id, tag_id]);
-    db.commit()
+        tag_id=cursor.lastrowid
+    cursor.execute('insert into movimento_tags(movimento_id, tag_id) values (%s,%s)', [movimento_id, tag_id]);
+    mysql.connection.commit()
+    cursor.close()
     return 'OK'
 
 
 @app.route('/api/tag/<movimento_id>/<tag_value>', methods=['DELETE'])
 @requires_auth
 def remove_tag(movimento_id, tag_value):
-    db = get_db()
-    cur = db.execute(
-        'select id from tags where value = ?',
+    cursor = mysql.connection.cursor()
+    cursor.execute(
+        'select id from tags where value = %s',
         [tag_value]);
-    tags = cur.fetchall()
+    tags = cursor.fetchall()
     if tags:
         tag_id = tags[0]['id']
-        cur = db.execute('delete from movimento_tags where movimento_id = ? and tag_id = ?', [movimento_id, tag_id]);
-        db.commit()
+        cursor.execute('delete from movimento_tags where movimento_id = %s and tag_id = %s', [movimento_id, tag_id]);
+        mysql.connection.commit()
+        cursor.close()
     return 'OK'
 
 
