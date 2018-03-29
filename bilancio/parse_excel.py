@@ -242,7 +242,7 @@ def parse_movimenti_carta(conto_id, sheet):
 
         movimento.compute_hash()
 
-        cursor.execute('select id from movimenti where row_hash = ?',
+        cursor.execute('select id from movimenti where row_hash = %s',
                          [movimento.row_hash])
         rec = cursor.fetchone()
         if not rec:
