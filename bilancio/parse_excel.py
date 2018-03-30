@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 import jwt, sys, traceback
 from functools import wraps
 from flask_mysqldb import MySQL
+from flask_bcrypt import Bcrypt
 
 ALLOWED_EXTENSIONS = set(['xls', 'xlsx'])
 
@@ -17,11 +18,14 @@ app.config.from_object('bilancio.contoarancioapp.config_app.DevelopmentConfig')
 
 app.config.update(dict(
     SECRET_KEY='asdkasdkasdkkAKAKK(((AMcsdkasd?Zasdk2230fksadlcmSJfdk:à',
-    UPLOAD_FOLDER=os.path.join(app.root_path, 'uploads')
+    UPLOAD_FOLDER=os.path.join(app.root_path, 'uploads'),
+    BCRYPT_LOG_ROUNDS=13
 ))
 app.config.from_envvar('CONTOARANCIO_SETTINGS', silent=True)
 
 mysql = MySQL(app)
+bcrypt = Bcrypt(app)
+
 
 class Movimento(object):
     def __init__(self):
@@ -147,18 +151,55 @@ def decode_auth_token(auth_token):
     return payload['sub']
 
 
+def generated_hash(password):
+    return bcrypt.generate_password_hash(
+        password, app.config.get('BCRYPT_LOG_ROUNDS')
+    ).decode()
+
+
 @app.route("/api/login", methods=['POST'])
 def do_login():
     username = request.form.get("email")
     password = request.form.get("password")
 
-    if username == 'lucacasa1986@gmail.com' and password == "NybGb28-24":
+    cursor = mysql.connection.cursor()
+    cursor.execute(""" select username, password from utenti where
+                      username = %s
+    """, [username])
+
+    user = cursor.fetchone()
+    cursor.close()
+    if user and bcrypt.check_password_hash(user["password"], password):
         token = encode_auth_token(username)
         return jsonify({
             "token": token.decode('utf-8')
         })
     else:
         return "Unauthorized", 401
+
+
+@app.route("/api/register", methods=['POST'])
+def do_register():
+    username = request.form.get("email")
+    password = request.form.get("password")
+
+    cursor = mysql.connection.cursor()
+    cursor.execute(""" select username, password from utenti where
+                      username = %s
+    """, [username])
+
+    user = cursor.fetchone()
+    if user:
+        cursor.close()
+        return "User already exists", 500
+    else:
+        cursor.execute(""" insert into utenti(username, password) 
+                          VALUES (%s,%s)""",
+                       [username, generated_hash(password)]
+                       )
+        mysql.connection.commit()
+        cursor.close()
+        return username, 200
 
 
 def requires_auth(f):
@@ -170,7 +211,8 @@ def requires_auth(f):
             return "Unauthorized", 401
         try:
             auth_token = auth_token.split(" ")[1]
-            decode_auth_token(auth_token)
+            sub = decode_auth_token(auth_token)
+            request.username = sub
         except jwt.ExpiredSignatureError:
             return 'Signature expired. Please log in again.', 401
         except jwt.InvalidTokenError:
@@ -291,13 +333,15 @@ def parse_file(conto_id):
 @requires_auth
 def get_lista_conti():
     cursor = mysql.connection.cursor()
+    username = request.username
     select = """
-        select id,
+        select conti.id,
         titolare,
         descrizione
-        from conti
+        from conti inner join utenti u ON conti.user_id = u.id
+        where u.username = %s
     """
-    cursor.execute(select)
+    cursor.execute(select, [username])
     entries = cursor.fetchall()
     return jsonify([e for e in entries])
 
