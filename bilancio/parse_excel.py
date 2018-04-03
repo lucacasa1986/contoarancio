@@ -364,6 +364,66 @@ def crea_conto():
     cursor.close()
     return str(cursor.lastrowid)
 
+@app.route("/api/<conto_id>/andamento", methods=['GET'])
+@requires_auth
+def get_andamento(conto_id):
+    cursor = mysql.connection.cursor()
+    from_date_param = request.args.get('from_date')
+    to_date_param = request.args.get('to_date')
+    if from_date_param:
+        from_date = datetime.strptime(from_date_param, '%Y-%m-%d').date()
+    else:
+        from_date = datetime.now() - timedelta(days=30)
+        from_date = from_date.date()
+
+    if to_date_param:
+        to_date = datetime.strptime(to_date_param, '%Y-%m-%d').date()
+    else:
+        to_date = datetime.now().date()
+
+
+    starting_value_q = """
+    select sum(importo) as partenza
+    from movimenti
+    where conto_id = %s
+    and data_movimento <= %s
+    """
+
+    cursor.execute(starting_value_q, [conto_id, from_date])
+    starting = cursor.fetchone()["partenza"]
+
+    if not starting:
+        starting = 0
+
+    date = [from_date.strftime('%d-%m-%Y')]
+    valori = [starting]
+
+
+    select = """
+            select data_movimento,sum(importo) as del_giorno
+            from movimenti
+            where conto_id = %s
+            and data_movimento > %s and data_movimento <= %s
+            group by data_movimento
+        """
+    params = [conto_id, from_date, to_date ]
+    cursor.execute(select, params)
+    entries = cursor.fetchall()
+
+
+    for row in entries:
+        starting = starting + row['del_giorno']
+        date.append(row['data_movimento'].strftime('%d-%m-%Y'))
+        valori.append(starting)
+
+    andamento = {
+        "date": date,
+        "valori": valori
+    }
+
+    return jsonify(andamento)
+
+
 
 @app.route("/api/<conto_id>", methods=['GET'])
 @requires_auth
