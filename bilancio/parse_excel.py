@@ -394,10 +394,11 @@ def get_andamento(conto_id):
 
     if not starting:
         starting = 0
-
-    date = [from_date.strftime('%d-%m-%Y')]
-    valori = [starting]
-
+        date = []
+        valori = []
+    else:
+        date = [from_date.strftime('%d-%m-%Y')]
+        valori = [starting]
 
     select = """
             select data_movimento,sum(importo) as del_giorno
@@ -410,10 +411,13 @@ def get_andamento(conto_id):
     cursor.execute(select, params)
     entries = cursor.fetchall()
 
-
     for row in entries:
         starting = starting + row['del_giorno']
         date.append(row['data_movimento'].strftime('%d-%m-%Y'))
+        valori.append(starting)
+
+    if not to_date.strftime('%d-%m-%Y') in date:
+        date.append(to_date.strftime('%d-%m-%Y'))
         valori.append(starting)
 
     andamento = {
