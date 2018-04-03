@@ -350,19 +350,23 @@ def get_lista_conti():
 @requires_auth
 def crea_conto():
     conto = request.get_json(force=True)
+    username = request.username
 
     cursor = mysql.connection.cursor()
+    cursor.execute(" select id from utenti where username = %s", [username])
+    utente = cursor.fetchone()
+
     cursor.execute("""
-                  INSERT INTO conti(titolare,descrizione) VALUES (%s,%s)
+                  INSERT INTO conti(titolare,descrizione, user_id) VALUES (%s,%s)
                         """,
-                   [conto["titolare"], conto["descrizione"]])
+                   [conto["titolare"], conto["descrizione"], utente["id"]])
     mysql.connection.commit()
     cursor.close()
     return str(cursor.lastrowid)
 
 
 @app.route("/api/<conto_id>", methods=['GET'])
-# @requires_auth
+@requires_auth
 def get_movimenti(conto_id):
     cursor = mysql.connection.cursor()
     from_date_param = request.args.get('from_date')
