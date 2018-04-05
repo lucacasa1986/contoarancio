@@ -266,19 +266,22 @@ def parse_movimenti_conto(conto_id, sheet):
 def parse_movimenti_carta(conto_id, sheet):
     movimenti = []
     cursor = mysql.connection.cursor()
-    for rowindex in range(1, sheet.nrows - 1):
+    for rowindex in range(1, sheet.nrows-1):
         check_val = sheet.cell_value(rowindex, 0)
         if not check_val:
             break
         movimento = Movimento()
         movimento.date = xldate_as_datetime(sheet.cell_value(rowindex, 0),
                                             datemode=0)
+        movimento.data_contabile = xldate_as_datetime(
+            sheet.cell_value(rowindex, 1),
+            datemode=0)
         movimento.type = 'PAGAMENTO CARTA DI CREDITO'
         movimento.description = sheet.cell_value(rowindex, 2)
         movimento.amount = sheet.cell_value(rowindex, 4) * -1
 
         movimento.compute_hash()
-
+        print('new movimento hash is ' + movimento.row_hash)
         cursor.execute('select id from movimenti where row_hash = %s',
                          [movimento.row_hash])
         rec = cursor.fetchone()
