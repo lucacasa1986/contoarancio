@@ -431,6 +431,77 @@ def get_andamento(conto_id):
     return jsonify(andamento)
 
 
+@app.route("/api/<conto_id>/parziali", methods=['GET'])
+# @requires_auth
+def get_per_categoria(conto_id):
+    cursor = mysql.connection.cursor()
+    from_date_param = request.args.get('from_date')
+    to_date_param = request.args.get('to_date')
+    categories = request.args.getlist('category')
+    if from_date_param:
+        from_date = datetime.strptime(from_date_param, '%Y-%m-%d').date()
+    else:
+        from_date = datetime.now() - timedelta(days=30)
+        from_date = from_date.date()
+
+    if to_date_param:
+        to_date = datetime.strptime(to_date_param, '%Y-%m-%d').date()
+    else:
+        to_date = datetime.now().date()
+
+
+    select = """
+    select categorie.descrizione, 
+    categorie.colore, 
+    categorie.id as categoria_id, 
+    DATE_FORMAT(data_movimento, '%%Y-%%m-01') as month,
+    sum(importo) as importo_tot
+    from movimenti inner join categorie on movimenti.categoria_id = categorie.id 
+    where categoria_id is not null and movimenti.conto_id = %s
+    and movimenti.data_movimento > %s and movimenti.data_movimento <= %s
+    """
+
+    params = [conto_id, from_date, to_date]
+
+    group_by = """
+    group by categorie.descrizione, categorie.colore, categorie.id, DATE_FORMAT(data_movimento, '%%Y-%%m-01')
+    order by categoria_id, month
+    """
+
+    if categories:
+        select = select + " and categoria_id in ( "
+        for category_id in categories:
+            select = select + "%s,"
+            params.append(category_id)
+        select = select[:-1] + ") "
+    print(select + " " + group_by)
+    print (params)
+    cursor.execute(select + " " + group_by, params)
+    entries = cursor.fetchall()
+
+    result = []
+    category_id = None
+    categoria = None
+    for row in entries:
+        curr_category_id = row["categoria_id"]
+        if not category_id or category_id != curr_category_id:
+            category_id = curr_category_id
+            # nuova categoria
+            categoria = {
+                "id": curr_category_id,
+                "colore": row["colore"],
+                "descrizione": row["descrizione"],
+                "rilevazioni": []
+            }
+            result.append(categoria)
+        categoria["rilevazioni"].append({
+            "month": row["month"],
+            "importo": row["importo_tot"]
+        })
+
+    return jsonify(result)
+
+
 
 @app.route("/api/<conto_id>", methods=['GET'])
 @requires_auth
