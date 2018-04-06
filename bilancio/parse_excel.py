@@ -432,7 +432,7 @@ def get_andamento(conto_id):
 
 
 @app.route("/api/<conto_id>/parziali", methods=['GET'])
-# @requires_auth
+@requires_auth
 def get_per_categoria(conto_id):
     cursor = mysql.connection.cursor()
     from_date_param = request.args.get('from_date')
