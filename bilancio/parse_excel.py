@@ -474,6 +474,8 @@ def get_per_categoria(conto_id):
             select = select + "%s,"
             params.append(category_id)
         select = select[:-1] + ") "
+    else:
+        return jsonify([])
     print(select + " " + group_by)
     print (params)
     cursor.execute(select + " " + group_by, params)
