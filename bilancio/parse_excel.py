@@ -238,6 +238,8 @@ def parse_movimenti_conto(conto_id, sheet):
                                             datemode=0)
 
         movimento.type = sheet.cell_value(rowindex, 2)
+        if movimento.type == 'CARTA CREDITO ING DIRECT':
+            continue
         movimento.description = sheet.cell_value(rowindex, 3)
         movimento.amount = sheet.cell_value(rowindex, 4)
 
