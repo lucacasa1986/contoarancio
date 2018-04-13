@@ -96,3 +96,24 @@ ALTER TABLE movimento_tags
 FOREIGN KEY (tag_id) REFERENCES tags (id);
 
 
+CREATE TABLE regole
+(
+    id int PRIMARY KEY AUTO_INCREMENT,
+    category_id int NOT NULL,
+    name text NOT NULL,
+    CONSTRAINT regole_categorie_id_fk FOREIGN KEY (category_id) REFERENCES categorie (id)
+);
+
+CREATE TABLE regole_condizione
+(
+    id int PRIMARY KEY AUTO_INCREMENT,
+    field text NOT NULL,
+    operator text NOT NULL,
+    regola_id int NOT NULL,
+    CONSTRAINT regole_condizione_regole_id_fk FOREIGN KEY (regola_id) REFERENCES regole (id)
+);
+
+ALTER TABLE regole_condizione ADD value text NULL;
+
+ALTER TABLE regole ADD priority int NULL;
+CREATE UNIQUE INDEX regole_priority_uindex ON regole (priority);

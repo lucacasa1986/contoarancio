@@ -224,6 +224,42 @@ def requires_auth(f):
     return decorated
 
 
+def assign_category(movimento):
+    cursor = mysql.connection.cursor()
+    cursor.execute('select id, category_id from regole order by priority')
+    rules = cursor.fetchall()
+    found_category_id = None
+    for rule in rules:
+        cursor.execute('select field, operator, value from regole_condizione '
+                       'where regola_id = %s', [rule["id"]])
+        conditions = cursor.fetchall()
+        conditions_match = True
+        for condition in conditions:
+            value = condition['value']
+            field = condition['field']
+            operatore = condition['operator']
+            movimento_column = None
+            if field == 'CAUSALE':
+                movimento_column = "type"
+            elif field == 'DESCRIZIONE':
+                movimento_column = 'description'
+            elif field == 'IMPORTO':
+                movimento_column = 'amount'
+            column_value = getattr(movimento, movimento_column)
+
+            if operatore == 'EQUALS':
+                if column_value.upper() !=  value.upper():
+                    conditions_match = False
+            elif operatore == 'CONTAINS':
+                if value.upper() not in column_value.upper():
+                    conditions_match = False
+        if conditions_match:
+            found_category_id = rule['category_id']
+            break
+    cursor.close()
+    return found_category_id
+
+
 def parse_movimenti_conto(conto_id, sheet):
     movimenti = []
     cursor = mysql.connection.cursor()
@@ -249,13 +285,21 @@ def parse_movimenti_conto(conto_id, sheet):
                          [movimento.row_hash])
         rec = cursor.fetchone()
         if not rec:
+            movimento.categoria_id = assign_category(movimento)
             cursor.execute("""
-                      INSERT INTO movimenti (tipo, descrizione, data_movimento, importo, row_hash, conto_id) 
-                      VALUES (%s, %s, %s, %s, %s, %s)
+                      INSERT INTO movimenti (tipo,
+                       descrizione, 
+                       data_movimento,
+                       importo,
+                       row_hash,
+                       categoria_id,
+                       conto_id) 
+                      VALUES (%s, %s, %s, %s, %s, %s, %s)
                       """,
                            [movimento.type, movimento.description,
                             movimento.date, movimento.amount,
-                            movimento.row_hash, conto_id])
+                            movimento.row_hash, movimento.categoria_id,
+                            conto_id])
             movimento.id = cursor.lastrowid
             movimenti.append(movimento)
         else:
@@ -288,13 +332,21 @@ def parse_movimenti_carta(conto_id, sheet):
                          [movimento.row_hash])
         rec = cursor.fetchone()
         if not rec:
+            movimento.categoria_id = assign_category(movimento)
             cursor.execute("""
-                          INSERT INTO movimenti (tipo, descrizione, data_movimento, importo, row_hash, conto_id)
-                          VALUES (%s, %s, %s, %s, %s, %s)
+                          INSERT INTO movimenti (tipo,
+                           descrizione,
+                           data_movimento,
+                           importo, 
+                           row_hash,
+                           categoria_id,
+                           conto_id)
+                          VALUES (%s, %s, %s, %s, %s, %s, %s)
                           """,
                            [movimento.type, movimento.description,
                             movimento.date, movimento.amount,
-                            movimento.row_hash, conto_id])
+                            movimento.row_hash, movimento.categoria_id,
+                            conto_id])
             movimento.id = cursor.lastrowid
             movimenti.append(movimento)
         else:
@@ -648,6 +700,105 @@ def remove_tag(movimento_id, tag_value):
         mysql.connection.commit()
         cursor.close()
     return 'OK'
+
+
+@app.route('/api/regole', methods=['GET'])
+def get_rules():
+    cursor = mysql.connection.cursor()
+    cursor.execute(
+        'select id, category_id, name from regole');
+    rules = cursor.fetchall()
+    for rule in rules:
+        # get conditions
+        cursor.execute('select id, field, operator, value from regole_condizione '
+                       'where regola_id = %s', [rule["id"]])
+        conditions = cursor.fetchall()
+        rule["conditions"] = conditions
+    return jsonify(rules)
+
+
+@app.route('/api/regole', methods=['POST'])
+@requires_auth
+def save_rule():
+    rule = request.get_json(force=True)
+    print(rule)
+    cursor = mysql.connection.cursor()
+    if rule["id"]:
+        cursor.execute(
+            'update regole set category_id=%s, name=%s  '
+            'where id = %s', [rule["category_id"], rule["name"], rule["id"]])
+
+        cursor.execute(
+            'delete from regole_condizione where regola_id = %s',
+            [rule["id"]]);
+
+        for condition in rule["conditions"]:
+            cursor.execute(
+                'insert into regole_condizione(field, operator, value, regola_id ) '
+                'value(%s, %s, %s, %s)', [condition["field"],
+                                          condition["operator"],
+                                          condition["value"],
+                                          rule["id"]
+                                          ])
+        mysql.connection.commit()
+
+    else:
+        cursor.execute(
+            'insert into regole(category_id, name)  '
+            'value(%s, %s)', [rule["category_id"], rule["name"]])
+
+        rule_id = cursor.lastrowid
+        for condition in rule["conditions"]:
+            cursor.execute(
+                'insert into regole_condizione(field, operator, value, regola_id ) '
+                'value(%s, %s, %s, %s)', [condition["field"],
+                                          condition["operator"],
+                                          condition["value"],
+                                          rule_id
+                                          ])
+        mysql.connection.commit()
+    cursor.close()
+
+    return jsonify('OK')
+
+
+@app.route('/api/regole/<conto_id>', methods=['PUT'])
+@requires_auth
+def apply_rules(conto_id):
+    cursor = mysql.connection.cursor()
+    query = " select * from movimenti where conto_id = %s"
+    cursor.execute(query, [conto_id])
+    movimenti_rows = cursor.fetchall()
+    for row in movimenti_rows:
+        movimento = Movimento()
+        movimento.date = row["data_movimento"]
+        movimento.type = row["tipo"]
+        movimento.id = row["id"]
+        movimento.description = row["descrizione"]
+        movimento.amount = row["importo"]
+        movimento.categoria_id = assign_category(movimento)
+        if movimento.categoria_id and \
+                movimento.categoria_id != row["categoria_id"]:
+            update_q = 'update movimenti set categoria_id = %s where id = %s'
+            cursor.execute(update_q, [movimento.categoria_id, movimento.id])
+    mysql.connection.commit()
+    cursor.close()
+    return jsonify('OK')
+
+
+@app.route('/api/regole/<id_regola>', methods=['DELETE'])
+@requires_auth
+def delete_rule(id_regola):
+    if id_regola:
+        cursor = mysql.connection.cursor()
+        cursor.execute(
+            'delete from regole_condizione '
+            'where regola_id = %s', [id_regola])
+        cursor.execute(
+            'delete from regole '
+            'where id = %s', [id_regola])
+        mysql.connection.commit()
+    return jsonify('OK')
 
 
 if __name__ == "__main__":
