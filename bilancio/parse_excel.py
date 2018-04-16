@@ -6,12 +6,12 @@ import hashlib
 from flask import Flask, jsonify, request, flash, redirect, g
 from werkzeug.utils import secure_filename
 from datetime import datetime, timedelta
-import jwt, sys, traceback
-from functools import wraps
 from flask_mysqldb import MySQL
 from flask_bcrypt import Bcrypt
+from flask_jwt import JWT, JWTError, jwt_required, current_identity
 
-ALLOWED_EXTENSIONS = set(['xls', 'xlsx'])
+
+ALLOWED_EXTENSIONS = {'xls', 'xlsx'}
 
 app = Flask(__name__)
 app.config.from_object('bilancio.contoarancioapp.config_app.DevelopmentConfig')
@@ -19,12 +19,54 @@ app.config.from_object('bilancio.contoarancioapp.config_app.DevelopmentConfig')
 app.config.update(dict(
     SECRET_KEY='asdkasdkasdkkAKAKK(((AMcsdkasd?Zasdk2230fksadlcmSJfdk:à',
     UPLOAD_FOLDER=os.path.join(app.root_path, 'uploads'),
-    BCRYPT_LOG_ROUNDS=13
+    BCRYPT_LOG_ROUNDS=13,
+    JWT_AUTH_URL_RULE=None,
+    JWT_AUTH_HEADER_PREFIX="Bearer"
 ))
 app.config.from_envvar('CONTOARANCIO_SETTINGS', silent=True)
 
 mysql = MySQL(app)
 bcrypt = Bcrypt(app)
+
+
+class User(object):
+    def __init__(self, id, password):
+        self.id = id
+        self.password = password
+
+    def __str__(self):
+        return "User(id='%s')" % self.id
+
+
+def authenticate(username, password):
+    cursor = mysql.connection.cursor()
+    cursor.execute(""" select id, username, password from utenti where
+                          username = %s
+        """, [username])
+
+    user = cursor.fetchone()
+    if user and bcrypt.check_password_hash(user["password"], password):
+        return User(user["username"], user["password"])
+    else:
+        return None
+
+
+def identify(payload):
+    cursor = mysql.connection.cursor()
+    cursor.execute(""" select username from utenti where
+                              username = %s
+            """, [payload['identity']])
+
+    user = cursor.fetchone()
+    return user
+
+
+def jwt_response_callback(access_token, identity):
+    return jsonify({'token': access_token.decode('utf-8')})
+
+
+jwt = JWT(app, authenticate, identify)
+jwt.auth_response_handler(jwt_response_callback)
 
 
 class Movimento(object):
@@ -97,7 +139,7 @@ def update_db():
             print('Error executing script %s: %s' % ('update%i.sql' % i, e))
             check_update = False
         else:
-            i = i+1
+            i = i + 1
     db.commit()
 
 
@@ -120,37 +162,6 @@ def allowed_file(filename):
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
-def encode_auth_token(user_id):
-    """
-    Generates the Auth Token
-    :return: string
-    """
-    try:
-        payload = {
-            'exp': datetime.utcnow() + timedelta(days=0, minutes=15),
-            'iat': datetime.utcnow(),
-            'sub': user_id
-        }
-        return jwt.encode(
-            payload,
-            app.config.get('SECRET_KEY'),
-            algorithm='HS256'
-        )
-    except Exception as e:
-        traceback.print_exc(file=sys.stdout)
-        return e
-
-
-def decode_auth_token(auth_token):
-    """
-    Decodes the auth token
-    :param auth_token:
-    :return: integer|string
-    """
-    payload = jwt.decode(auth_token, app.config.get('SECRET_KEY'))
-    return payload['sub']
-
-
 def generated_hash(password):
     return bcrypt.generate_password_hash(
         password, app.config.get('BCRYPT_LOG_ROUNDS')
@@ -162,20 +173,13 @@ def do_login():
     username = request.form.get("email")
     password = request.form.get("password")
 
-    cursor = mysql.connection.cursor()
-    cursor.execute(""" select username, password from utenti where
-                      username = %s
-    """, [username])
+    identity = jwt.authentication_callback(username, password)
 
-    user = cursor.fetchone()
-    cursor.close()
-    if user and bcrypt.check_password_hash(user["password"], password):
-        token = encode_auth_token(username)
-        return jsonify({
-            "token": token.decode('utf-8')
-        })
+    if identity:
+        access_token = jwt.jwt_encode_callback(identity)
+        return jwt.auth_response_callback(access_token, identity)
     else:
-        return "Unauthorized", 401
+        raise JWTError('Bad Request', 'Invalid credentials')
 
 
 @app.route("/api/register", methods=['POST'])
@@ -202,28 +206,6 @@ def do_register():
         return username, 200
 
 
-def requires_auth(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        auth_token = request.headers.get('Authorization')
-
-        if not auth_token:
-            return "Unauthorized", 401
-        try:
-            auth_token = auth_token.split(" ")[1]
-            sub = decode_auth_token(auth_token)
-            request.username = sub
-        except jwt.ExpiredSignatureError:
-            return 'Signature expired. Please log in again.', 401
-        except jwt.InvalidTokenError:
-            return 'Invalid token. Please log in again.', 401
-        except Exception:
-            return "Unauthorized", 401
-        else:
-            return f(*args, **kwargs)
-    return decorated
-
-
 def assign_category(movimento):
     cursor = mysql.connection.cursor()
     cursor.execute('select id, category_id from regole order by priority')
@@ -248,7 +230,7 @@ def assign_category(movimento):
             column_value = getattr(movimento, movimento_column)
 
             if operatore == 'EQUALS':
-                if column_value.upper() !=  value.upper():
+                if column_value.upper() != value.upper():
                     conditions_match = False
             elif operatore == 'CONTAINS':
                 if value.upper() not in column_value.upper():
@@ -270,8 +252,9 @@ def parse_movimenti_conto(conto_id, sheet):
         movimento = Movimento()
         movimento.date = xldate_as_datetime(sheet.cell_value(rowindex, 1),
                                             datemode=0)
-        movimento.data_contabile = xldate_as_datetime(sheet.cell_value(rowindex, 0),
-                                            datemode=0)
+        movimento.data_contabile = xldate_as_datetime(
+            sheet.cell_value(rowindex, 0),
+            datemode=0)
 
         movimento.type = sheet.cell_value(rowindex, 2)
         if movimento.type == 'CARTA CREDITO ING DIRECT':
@@ -282,7 +265,7 @@ def parse_movimenti_conto(conto_id, sheet):
         movimento.compute_hash()
 
         cursor.execute('select id from movimenti where row_hash = %s',
-                         [movimento.row_hash])
+                       [movimento.row_hash])
         rec = cursor.fetchone()
         if not rec:
             movimento.categoria_id = assign_category(movimento)
@@ -312,7 +295,7 @@ def parse_movimenti_conto(conto_id, sheet):
 def parse_movimenti_carta(conto_id, sheet):
     movimenti = []
     cursor = mysql.connection.cursor()
-    for rowindex in range(1, sheet.nrows-1):
+    for rowindex in range(1, sheet.nrows - 1):
         check_val = sheet.cell_value(rowindex, 0)
         if not check_val:
             break
@@ -329,7 +312,7 @@ def parse_movimenti_carta(conto_id, sheet):
         movimento.compute_hash()
         print('new movimento hash is ' + movimento.row_hash)
         cursor.execute('select id from movimenti where row_hash = %s',
-                         [movimento.row_hash])
+                       [movimento.row_hash])
         rec = cursor.fetchone()
         if not rec:
             movimento.categoria_id = assign_category(movimento)
@@ -357,9 +340,8 @@ def parse_movimenti_carta(conto_id, sheet):
 
 
 @app.route("/api/parse/<conto_id>", methods=['POST'])
-@requires_auth
+@jwt_required()
 def parse_file(conto_id):
-
     if 'excel_file' not in request.files:
         flash('No file part')
         return redirect(request.url)
@@ -377,20 +359,20 @@ def parse_file(conto_id):
         sheet = res.sheet_by_index(0)
 
         tipo_movimenti = request.form.get('type')
-
+        movimenti = []
         if not tipo_movimenti or tipo_movimenti == 'CONTO':
             movimenti = parse_movimenti_conto(conto_id, sheet)
         elif tipo_movimenti == 'CARTA':
             movimenti = parse_movimenti_carta(conto_id, sheet)
 
-        return jsonify([ m.__dict__ for m in movimenti])
+        return jsonify([m.__dict__ for m in movimenti])
 
 
 @app.route("/api/conti", methods=['GET'])
-@requires_auth
+@jwt_required()
 def get_lista_conti():
     cursor = mysql.connection.cursor()
-    username = request.username
+    username = current_identity["username"]
     select = """
         select conti.id,
         titolare,
@@ -404,25 +386,25 @@ def get_lista_conti():
 
 
 @app.route('/api/conto', methods=['POST'])
-@requires_auth
+@jwt_required()
 def crea_conto():
     conto = request.get_json(force=True)
-    username = request.username
+    username = current_identity["username"]
 
     cursor = mysql.connection.cursor()
     cursor.execute(" select id from utenti where username = %s", [username])
     utente = cursor.fetchone()
 
-    cursor.execute("""
-                  INSERT INTO conti(titolare,descrizione, user_id) VALUES (%s,%s)
-                        """,
+    cursor.execute('INSERT INTO conti(titolare,descrizione,user_id) '
+                   'VALUES (%s,%s,%s)',
                    [conto["titolare"], conto["descrizione"], utente["id"]])
     mysql.connection.commit()
     cursor.close()
     return str(cursor.lastrowid)
 
+
 @app.route("/api/<conto_id>/andamento", methods=['GET'])
-@requires_auth
+@jwt_required()
 def get_andamento(conto_id):
     cursor = mysql.connection.cursor()
     from_date_param = request.args.get('from_date')
@@ -437,7 +419,6 @@ def get_andamento(conto_id):
         to_date = datetime.strptime(to_date_param, '%Y-%m-%d').date()
     else:
         to_date = datetime.now().date()
-
 
     starting_value_q = """
     select sum(importo) as partenza
@@ -464,7 +445,7 @@ def get_andamento(conto_id):
             and data_movimento > %s and data_movimento <= %s
             group by data_movimento
         """
-    params = [conto_id, from_date, to_date ]
+    params = [conto_id, from_date, to_date]
     cursor.execute(select, params)
     entries = cursor.fetchall()
 
@@ -486,7 +467,7 @@ def get_andamento(conto_id):
 
 
 @app.route("/api/<conto_id>/parziali", methods=['GET'])
-@requires_auth
+@jwt_required()
 def get_per_categoria(conto_id):
     cursor = mysql.connection.cursor()
     from_date_param = request.args.get('from_date')
@@ -503,7 +484,6 @@ def get_per_categoria(conto_id):
     else:
         to_date = datetime.now().date()
 
-
     select = """
     select categorie.descrizione, 
     categorie.colore, 
@@ -518,7 +498,8 @@ def get_per_categoria(conto_id):
     params = [conto_id, from_date, to_date]
 
     group_by = """
-    group by categorie.descrizione, categorie.colore, categorie.id, DATE_FORMAT(data_movimento, '%%Y-%%m-01')
+    group by categorie.descrizione, categorie.colore,
+    categorie.id, DATE_FORMAT(data_movimento, '%%Y-%%m-01')
     order by categoria_id, month
     """
 
@@ -530,8 +511,6 @@ def get_per_categoria(conto_id):
         select = select[:-1] + ") "
     else:
         return jsonify([])
-    print(select + " " + group_by)
-    print (params)
     cursor.execute(select + " " + group_by, params)
     entries = cursor.fetchall()
 
@@ -558,9 +537,8 @@ def get_per_categoria(conto_id):
     return jsonify(result)
 
 
-
 @app.route("/api/<conto_id>", methods=['GET'])
-@requires_auth
+@jwt_required()
 def get_movimenti(conto_id):
     cursor = mysql.connection.cursor()
     from_date_param = request.args.get('from_date')
@@ -612,11 +590,11 @@ def get_movimenti(conto_id):
         movimento.row_hash = row["row_hash"]
         movimento.tags = load_tags_for_movimento(movimento.id)
         movimenti.append(movimento)
-    return jsonify([ m.__dict__ for m in movimenti])
+    return jsonify([m.__dict__ for m in movimenti])
 
 
 @app.route("/api/movimento", methods=['PUT'])
-@requires_auth
+@jwt_required()
 def update_movimento():
     movimento = request.get_json(force=True)
     if not movimento.get("id"):
@@ -635,7 +613,9 @@ def update_movimento():
 @app.route("/api/categories", methods=['GET'])
 def get_all_categories():
     cursor = mysql.connection.cursor()
-    cursor.execute('select id, descrizione, colore, icon_class, tipo from categorie order by descrizione')
+    cursor.execute(
+        'select id, descrizione, colore, icon_class, tipo '
+        'from categorie order by descrizione')
     cursor.fetchall()
     return jsonify([e for e in cursor])
 
@@ -659,44 +639,48 @@ def load_tags_for_movimento(movimento_id):
 
 
 @app.route('/api/tag/<movimento_id>', methods=['GET'])
-@requires_auth
+@jwt_required()
 def get_tag_for_movimento(movimento_id):
     entries = load_tags_for_movimento(movimento_id)
     return jsonify([e for e in entries])
 
 
 @app.route('/api/tag/<movimento_id>/<tag_value>', methods=['PUT'])
-@requires_auth
+@jwt_required()
 def add_tag(movimento_id, tag_value):
     cursor = mysql.connection.cursor()
     cursor.execute(
         'select id from tags where value = %s',
-        [tag_value]);
+        [tag_value])
     tags = cursor.fetchall()
     if tags:
         tag_id = tags[0]['id']
     else:
         cursor.execute(
             'insert into tags(value, name) values (%s,%s)',
-            [tag_value, tag_value]);
-        tag_id=cursor.lastrowid
-    cursor.execute('insert into movimento_tags(movimento_id, tag_id) values (%s,%s)', [movimento_id, tag_id]);
+            [tag_value, tag_value])
+        tag_id = cursor.lastrowid
+    cursor.execute('insert into movimento_tags(movimento_id, tag_id) '
+                   'values (%s,%s)',
+                   [movimento_id, tag_id])
     mysql.connection.commit()
     cursor.close()
     return 'OK'
 
 
 @app.route('/api/tag/<movimento_id>/<tag_value>', methods=['DELETE'])
-@requires_auth
+@jwt_required()
 def remove_tag(movimento_id, tag_value):
     cursor = mysql.connection.cursor()
     cursor.execute(
         'select id from tags where value = %s',
-        [tag_value]);
+        [tag_value])
     tags = cursor.fetchall()
     if tags:
         tag_id = tags[0]['id']
-        cursor.execute('delete from movimento_tags where movimento_id = %s and tag_id = %s', [movimento_id, tag_id]);
+        cursor.execute('delete from movimento_tags '
+                       'where movimento_id = %s and tag_id = %s',
+                       [movimento_id, tag_id])
         mysql.connection.commit()
         cursor.close()
     return 'OK'
@@ -706,22 +690,22 @@ def remove_tag(movimento_id, tag_value):
 def get_rules():
     cursor = mysql.connection.cursor()
     cursor.execute(
-        'select id, category_id, name from regole');
+        'select id, category_id, name from regole')
     rules = cursor.fetchall()
     for rule in rules:
         # get conditions
-        cursor.execute('select id, field, operator, value from regole_condizione '
-                       'where regola_id = %s', [rule["id"]])
+        cursor.execute(
+            'select id, field, operator, value from regole_condizione '
+            'where regola_id = %s', [rule["id"]])
         conditions = cursor.fetchall()
         rule["conditions"] = conditions
     return jsonify(rules)
 
 
 @app.route('/api/regole', methods=['POST'])
-@requires_auth
+@jwt_required()
 def save_rule():
     rule = request.get_json(force=True)
-    print(rule)
     cursor = mysql.connection.cursor()
     if rule["id"]:
         cursor.execute(
@@ -730,11 +714,12 @@ def save_rule():
 
         cursor.execute(
             'delete from regole_condizione where regola_id = %s',
-            [rule["id"]]);
+            [rule["id"]])
 
         for condition in rule["conditions"]:
             cursor.execute(
-                'insert into regole_condizione(field, operator, value, regola_id ) '
+                'insert into '
+                'regole_condizione(field, operator, value, regola_id ) '
                 'value(%s, %s, %s, %s)', [condition["field"],
                                           condition["operator"],
                                           condition["value"],
@@ -750,7 +735,8 @@ def save_rule():
         rule_id = cursor.lastrowid
         for condition in rule["conditions"]:
             cursor.execute(
-                'insert into regole_condizione(field, operator, value, regola_id ) '
+                'insert into '
+                'regole_condizione(field, operator, value, regola_id ) '
                 'value(%s, %s, %s, %s)', [condition["field"],
                                           condition["operator"],
                                           condition["value"],
@@ -763,7 +749,7 @@ def save_rule():
 
 
 @app.route('/api/regole/<conto_id>', methods=['PUT'])
-@requires_auth
+@jwt_required()
 def apply_rules(conto_id):
     cursor = mysql.connection.cursor()
     query = " select * from movimenti where conto_id = %s"
@@ -787,7 +773,7 @@ def apply_rules(conto_id):
 
 
 @app.route('/api/regole/<id_regola>', methods=['DELETE'])
-@requires_auth
+@jwt_required()
 def delete_rule(id_regola):
     if id_regola:
         cursor = mysql.connection.cursor()
