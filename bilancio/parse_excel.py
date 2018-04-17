@@ -245,7 +245,7 @@ def assign_category(movimento):
 
 def parse_amount(value):
     if value:
-        return float(value.split(" ")[1].replace(',','.'))
+        return float(value.split(" ")[1].replace('.','').replace(',','.'))
     return value
 
 
