@@ -246,7 +246,7 @@ def assign_category(movimento):
 def parse_amount(value):
     if value:
         value_str = value.split(" ")
-        if len(value_str > 1):
+        if len(value_str) > 1:
             value_str = value_str[1]
         else:
             value_str = value_str[0]
