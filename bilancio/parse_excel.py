@@ -1,6 +1,7 @@
 import xlrd
 import xlrd.sheet
 from xlrd.xldate import xldate_as_datetime
+from xlrd.biffh import XLRDError
 import os
 import hashlib
 from flask import Flask, jsonify, request, flash, redirect, g
@@ -9,7 +10,8 @@ from datetime import datetime, timedelta
 from flask_mysqldb import MySQL
 from flask_bcrypt import Bcrypt
 from flask_jwt import JWT, JWTError, jwt_required, current_identity
-
+import pandas as pd
+import locale
 
 ALLOWED_EXTENSIONS = {'xls', 'xlsx'}
 
@@ -242,6 +244,33 @@ def assign_category(movimento):
     return found_category_id
 
 
+def parse_amount(value):
+    if value:
+        return locale.atof(value.split(" ")[1])
+    return value
+
+
+def convert_html_to_xls(filename):
+    locale.setlocale(locale.LC_ALL, 'it')
+    tmp_filename = os.path.join(app.config['UPLOAD_FOLDER'], 'tmp_output.xlsx')
+
+    writer = pd.ExcelWriter(tmp_filename)
+
+    frames = pd.read_html(os.path.join(app.config['UPLOAD_FOLDER'], filename),
+                          header=0,
+                          index_col=0,
+                          converters={
+                              4: parse_amount
+                          }
+                          )
+    if frames:
+        df = frames[0]
+        df.to_excel(writer,'Sheet1')
+    writer.save()
+
+    return tmp_filename
+
+
 def parse_movimenti_conto(conto_id, sheet):
     movimenti = []
     cursor = mysql.connection.cursor()
@@ -250,11 +279,20 @@ def parse_movimenti_conto(conto_id, sheet):
         if not check_val:
             break
         movimento = Movimento()
-        movimento.date = xldate_as_datetime(sheet.cell_value(rowindex, 1),
-                                            datemode=0)
-        movimento.data_contabile = xldate_as_datetime(
-            sheet.cell_value(rowindex, 0),
-            datemode=0)
+        try:
+            movimento.date = xldate_as_datetime(sheet.cell_value(rowindex, 1),
+                                                datemode=0)
+        except:
+            date_str = sheet.cell_value(rowindex, 1)
+            movimento.date = datetime.strptime(date_str, '%d/%m/%Y')
+
+        try:
+            movimento.data_contabile = xldate_as_datetime(
+                sheet.cell_value(rowindex, 0),
+                datemode=0)
+        except:
+            date_str = sheet.cell_value(rowindex, 0)
+            movimento.data_contabile = datetime.strptime(date_str, '%d/%m/%Y')
 
         movimento.type = sheet.cell_value(rowindex, 2)
         if movimento.type == 'CARTA CREDITO ING DIRECT':
@@ -300,11 +338,21 @@ def parse_movimenti_carta(conto_id, sheet):
         if not check_val:
             break
         movimento = Movimento()
-        movimento.date = xldate_as_datetime(sheet.cell_value(rowindex, 0),
-                                            datemode=0)
-        movimento.data_contabile = xldate_as_datetime(
-            sheet.cell_value(rowindex, 1),
-            datemode=0)
+
+        try:
+            movimento.date = xldate_as_datetime(sheet.cell_value(rowindex, 0),
+                                                datemode=0)
+        except:
+            date_str = sheet.cell_value(rowindex, 0)
+            movimento.date = datetime.strptime(date_str, '%d/%m/%Y')
+
+        try:
+            movimento.data_contabile = xldate_as_datetime(sheet.cell_value(rowindex, 1),
+                                                datemode=0)
+        except:
+            date_str = sheet.cell_value(rowindex, 1)
+            movimento.data_contabile = datetime.strptime(date_str,'%d/%m/%Y')
+
         movimento.type = 'PAGAMENTO CARTA DI CREDITO'
         movimento.description = sheet.cell_value(rowindex, 2)
         movimento.amount = sheet.cell_value(rowindex, 4) * -1
@@ -342,6 +390,8 @@ def parse_movimenti_carta(conto_id, sheet):
 @app.route("/api/parse/<conto_id>", methods=['POST'])
 @jwt_required()
 def parse_file(conto_id):
+    movimenti = []
+    tipo_movimenti = request.form.get('type')
     if 'excel_file' not in request.files:
         flash('No file part')
         return redirect(request.url)
@@ -349,17 +399,20 @@ def parse_file(conto_id):
     if file.filename == '':
         flash('No selected file')
         return redirect(request.url)
-
     if file and allowed_file(file.filename):
         filename = secure_filename(file.filename)
         file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
 
-        res = xlrd.open_workbook(
-            filename=os.path.join(app.config['UPLOAD_FOLDER'], filename))
-        sheet = res.sheet_by_index(0)
+        try:
+            res = xlrd.open_workbook(
+                filename=os.path.join(app.config['UPLOAD_FOLDER'], filename))
+            sheet = res.sheet_by_index(0)
+        except XLRDError:
+            # not a valid excel , maybe it's an html table
+            tmp_filename = convert_html_to_xls(filename=filename)
+            res = xlrd.open_workbook(filename=tmp_filename)
+            sheet = res.sheet_by_index(0)
 
-        tipo_movimenti = request.form.get('type')
-        movimenti = []
         if not tipo_movimenti or tipo_movimenti == 'CONTO':
             movimenti = parse_movimenti_conto(conto_id, sheet)
         elif tipo_movimenti == 'CARTA':
