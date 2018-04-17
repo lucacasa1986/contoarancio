@@ -95,6 +95,7 @@ class Movimento(object):
         m.update(repr(self.type).encode('utf-8'))
         m.update(repr(self.amount).encode('utf-8'))
         m.update(repr(self.description).encode('utf-8'))
+        m.update(repr(self.date).encode('utf-8'))
         m.update(repr(self.data_contabile).encode('utf-8'))
         self.row_hash = m.hexdigest()
 
@@ -254,19 +255,32 @@ def parse_amount(value):
     return value
 
 
-def convert_html_to_xls(filename):
+def convert_html_to_xls(filename, tipo):
     tmp_filename = os.path.join(app.config['UPLOAD_FOLDER'], 'tmp_output.xlsx')
 
     writer = pd.ExcelWriter(tmp_filename)
 
-    frames = pd.read_html(os.path.join(app.config['UPLOAD_FOLDER'], filename),
-                          flavor="bs4",
-                          header=0,
-                          index_col=0,
-                          converters={
-                              4: parse_amount
-                          }
-                          )
+    if not tipo or tipo == 'CONTO':
+
+        frames = pd.read_html(os.path.join(app.config['UPLOAD_FOLDER'], filename),
+                              flavor="bs4",
+                              header=0,
+                              index_col=0,
+                              thousands="",
+                              decimal=",",
+                              converters={
+                                  4: parse_amount
+                              }
+                              )
+    else:
+        frames = pd.read_html(
+            os.path.join(app.config['UPLOAD_FOLDER'], filename),
+            flavor="bs4",
+            header=0,
+            index_col=0,
+            thousands="",
+            decimal=","
+            )
     if frames:
         df = frames[0]
         df.to_excel(writer,'Sheet1')
@@ -337,8 +351,8 @@ def parse_movimenti_conto(conto_id, sheet):
 def parse_movimenti_carta(conto_id, sheet):
     movimenti = []
     cursor = mysql.connection.cursor()
-    for rowindex in range(1, sheet.nrows - 1):
-        check_val = sheet.cell_value(rowindex, 0)
+    for rowindex in range(1, sheet.nrows):
+        check_val = sheet.cell_value(rowindex, 3)
         if not check_val:
             break
         movimento = Movimento()
@@ -362,7 +376,6 @@ def parse_movimenti_carta(conto_id, sheet):
         movimento.amount = sheet.cell_value(rowindex, 4) * -1
 
         movimento.compute_hash()
-        print('new movimento hash is ' + movimento.row_hash)
         cursor.execute('select id from movimenti where row_hash = %s',
                        [movimento.row_hash])
         rec = cursor.fetchone()
@@ -413,7 +426,8 @@ def parse_file(conto_id):
             sheet = res.sheet_by_index(0)
         except XLRDError:
             # not a valid excel , maybe it's an html table
-            tmp_filename = convert_html_to_xls(filename=filename)
+            tmp_filename = convert_html_to_xls(filename=filename,
+                                               tipo=tipo_movimenti)
             res = xlrd.open_workbook(filename=tmp_filename)
             sheet = res.sheet_by_index(0)
 
