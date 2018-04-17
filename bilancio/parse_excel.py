@@ -11,7 +11,6 @@ from flask_mysqldb import MySQL
 from flask_bcrypt import Bcrypt
 from flask_jwt import JWT, JWTError, jwt_required, current_identity
 import pandas as pd
-import locale
 
 ALLOWED_EXTENSIONS = {'xls', 'xlsx'}
 
@@ -246,17 +245,17 @@ def assign_category(movimento):
 
 def parse_amount(value):
     if value:
-        return locale.atof(value.split(" ")[1])
+        return float(value.split(" ")[1].replace(',','.'))
     return value
 
 
 def convert_html_to_xls(filename):
-    locale.setlocale(locale.LC_ALL, 'it')
     tmp_filename = os.path.join(app.config['UPLOAD_FOLDER'], 'tmp_output.xlsx')
 
     writer = pd.ExcelWriter(tmp_filename)
 
     frames = pd.read_html(os.path.join(app.config['UPLOAD_FOLDER'], filename),
+                          flavor="bs4",
                           header=0,
                           index_col=0,
                           converters={
