@@ -22,7 +22,8 @@ app.config.update(dict(
     UPLOAD_FOLDER=os.path.join(app.root_path, 'uploads'),
     BCRYPT_LOG_ROUNDS=13,
     JWT_AUTH_URL_RULE=None,
-    JWT_AUTH_HEADER_PREFIX="Bearer"
+    JWT_AUTH_HEADER_PREFIX="Bearer",
+    JWT_EXPIRATION_DELTA=timedelta(seconds=3600)
 ))
 app.config.from_envvar('CONTOARANCIO_SETTINGS', silent=True)
 
@@ -684,11 +685,52 @@ def update_movimento():
 @app.route("/api/categories", methods=['GET'])
 def get_all_categories():
     cursor = mysql.connection.cursor()
-    cursor.execute(
-        'select id, descrizione, colore, icon_class, tipo '
-        'from categorie order by descrizione')
+    cursor.execute("""
+select
+  categorie.id,
+  categorie.descrizione,
+  categorie.colore,
+  categorie.icon_class,
+  categorie.tipo,
+  s.id sottocategoria_id,
+  s.descrizione sottocategoria_desc
+from categorie
+  left outer join sottocategorie s on categorie.id = s.categoria_id
+order by categorie.id
+""")
     cursor.fetchall()
-    return jsonify([e for e in cursor])
+    categorie = []
+    current_categoria_id = None
+    for e in cursor:
+        categoria_id = e["id"]
+        if current_categoria_id is None or categoria_id != current_categoria_id:
+            # nuova categoria
+            categoria = {
+                "id": e["id"],
+                "descrizione": e["descrizione"],
+                "colore": e["colore"],
+                "icon_class": e["icon_class"],
+                "tipo": e["tipo"],
+                "sottocategorie": []
+            }
+            categorie.append(categoria)
+            if e["sottocategoria_id"]:
+                sottocategoria = {
+                    "id": e["sottocategoria_id"],
+                    "categoria_id": e["id"],
+                    "descrizione": e["sottocategoria_desc"]
+                }
+                categoria["sottocategorie"].append(sottocategoria)
+        else:
+            if e["sottocategoria_id"]:
+                sottocategoria = {
+                    "id": e["sottocategoria_id"],
+                    "categoria_id": e["id"],
+                    "descrizione": e["sottocategoria_desc"]
+                }
+                categoria["sottocategorie"].append(sottocategoria)
+
+    return jsonify(categorie)
 
 
 @app.route("/api/tags", methods=['GET'])
