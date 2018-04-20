@@ -740,6 +740,28 @@ order by categorie.id
     return jsonify(categorie)
 
 
+@app.route("/api/subcategories", methods=['POST'])
+@jwt_required()
+def update_subcategory():
+    subcategory = request.get_json(force=True)
+    cursor = mysql.connection.cursor()
+    if subcategory["id"]:
+        # update
+        cursor.execute("""update sottocategorie set categoria_id=%s,
+              descrizione=%s where id=%s
+        """, [subcategory["categoria_id"], subcategory["descrizione"],
+              subcategory["id"]])
+    else:
+        # insert
+        cursor.execute("""insert into sottocategorie(categoria_id, descrizione)
+                      values(%s,%s)
+                """, [subcategory["categoria_id"], subcategory["descrizione"]])
+        subcategory["id"] = cursor.lastrowid
+
+    mysql.connection.commit()
+    cursor.close()
+    return jsonify(subcategory)
+
 @app.route("/api/tags", methods=['GET'])
 def get_all_tags():
     cursor = mysql.connection.cursor()
