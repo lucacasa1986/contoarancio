@@ -201,7 +201,7 @@ def do_register():
         cursor.close()
         return "User already exists", 500
     else:
-        cursor.execute(""" insert into utenti(username, password) 
+        cursor.execute(""" insert into utenti(username, password)
                           VALUES (%s,%s)""",
                        [username, generated_hash(password)]
                        )
@@ -331,13 +331,13 @@ def parse_movimenti_conto(conto_id, sheet):
             movimento.categoria_id, movimento.sottocategoria_id = assign_category(movimento)
             cursor.execute("""
                       INSERT INTO movimenti (tipo,
-                       descrizione, 
+                       descrizione,
                        data_movimento,
                        importo,
                        row_hash,
                        categoria_id,
                        sottocategoria_id,
-                       conto_id) 
+                       conto_id)
                       VALUES (%s, %s, %s, %s, %s, %s,%s, %s)
                       """,
                            [movimento.type, movimento.description,
@@ -391,7 +391,7 @@ def parse_movimenti_carta(conto_id, sheet):
                           INSERT INTO movimenti (tipo,
                            descrizione,
                            data_movimento,
-                           importo, 
+                           importo,
                            row_hash,
                            categoria_id,
                            sottocategoria_id,
@@ -564,12 +564,12 @@ def get_per_categoria(conto_id):
         to_date = datetime.now().date()
 
     select = """
-    select categorie.descrizione, 
-    categorie.colore, 
-    categorie.id as categoria_id, 
+    select categorie.descrizione,
+    categorie.colore,
+    categorie.id as categoria_id,
     DATE_FORMAT(data_movimento, '%%Y-%%m-01') as month,
     sum(importo) as importo_tot
-    from movimenti inner join categorie on movimenti.categoria_id = categorie.id 
+    from movimenti inner join categorie on movimenti.categoria_id = categorie.id
     where categoria_id is not null and movimenti.conto_id = %s
     and movimenti.data_movimento > %s and movimenti.data_movimento <= %s
     """
@@ -913,8 +913,9 @@ def apply_rules(conto_id):
         movimento.description = row["descrizione"]
         movimento.amount = row["importo"]
         movimento.categoria_id, movimento.sottocategoria_id = assign_category(movimento)
-        update_q = 'update movimenti set categoria_id = %s, sottocategoria_id=%s where id = %s'
-        cursor.execute(update_q, [movimento.categoria_id,movimento.sottocategoria_id, movimento.id])
+        if movimento.categoria_id and (movimento.categoria_id != row["categoria_id"] or movimento.sottocategoria_id != row['sottocategoria_id']):
+            update_q = 'update movimenti set categoria_id = %s, sottocategoria_id=%s where id = %s'
+            cursor.execute(update_q, [movimento.categoria_id,movimento.sottocategoria_id, movimento.id])
     mysql.connection.commit()
     cursor.close()
     return jsonify('OK')
