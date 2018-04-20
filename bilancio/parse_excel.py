@@ -212,9 +212,10 @@ def do_register():
 
 def assign_category(movimento):
     cursor = mysql.connection.cursor()
-    cursor.execute('select id, category_id from regole order by priority')
+    cursor.execute('select id, category_id, subcategory_id from regole order by priority')
     rules = cursor.fetchall()
     found_category_id = None
+    found_subcat_id = None
     for rule in rules:
         cursor.execute('select field, operator, value from regole_condizione '
                        'where regola_id = %s', [rule["id"]])
@@ -241,9 +242,10 @@ def assign_category(movimento):
                     conditions_match = False
         if conditions_match:
             found_category_id = rule['category_id']
+            found_subcat_id = rule['subcategory_id']
             break
     cursor.close()
-    return found_category_id
+    return found_category_id, found_subcat_id
 
 
 def parse_amount(value):
@@ -326,7 +328,7 @@ def parse_movimenti_conto(conto_id, sheet):
                        [movimento.row_hash])
         rec = cursor.fetchone()
         if not rec:
-            movimento.categoria_id = assign_category(movimento)
+            movimento.categoria_id, movimento.sottocategoria_id = assign_category(movimento)
             cursor.execute("""
                       INSERT INTO movimenti (tipo,
                        descrizione, 
@@ -334,12 +336,14 @@ def parse_movimenti_conto(conto_id, sheet):
                        importo,
                        row_hash,
                        categoria_id,
+                       sottocategoria_id,
                        conto_id) 
-                      VALUES (%s, %s, %s, %s, %s, %s, %s)
+                      VALUES (%s, %s, %s, %s, %s, %s,%s, %s)
                       """,
                            [movimento.type, movimento.description,
                             movimento.date, movimento.amount,
                             movimento.row_hash, movimento.categoria_id,
+                            movimento.sottocategoria_id,
                             conto_id])
             movimento.id = cursor.lastrowid
             movimenti.append(movimento)
@@ -382,7 +386,7 @@ def parse_movimenti_carta(conto_id, sheet):
                        [movimento.row_hash])
         rec = cursor.fetchone()
         if not rec:
-            movimento.categoria_id = assign_category(movimento)
+            movimento.categoria_id , movimento.sottocategoria_id= assign_category(movimento)
             cursor.execute("""
                           INSERT INTO movimenti (tipo,
                            descrizione,
@@ -390,12 +394,14 @@ def parse_movimenti_carta(conto_id, sheet):
                            importo, 
                            row_hash,
                            categoria_id,
+                           sottocategoria_id,
                            conto_id)
-                          VALUES (%s, %s, %s, %s, %s, %s, %s)
+                          VALUES (%s, %s, %s, %s, %s, %s,%s, %s)
                           """,
                            [movimento.type, movimento.description,
                             movimento.date, movimento.amount,
                             movimento.row_hash, movimento.categoria_id,
+                            movimento.sottocategoria_id,
                             conto_id])
             movimento.id = cursor.lastrowid
             movimenti.append(movimento)
@@ -906,11 +912,9 @@ def apply_rules(conto_id):
         movimento.id = row["id"]
         movimento.description = row["descrizione"]
         movimento.amount = row["importo"]
-        movimento.categoria_id = assign_category(movimento)
-        if movimento.categoria_id and \
-                movimento.categoria_id != row["categoria_id"]:
-            update_q = 'update movimenti set categoria_id = %s where id = %s'
-            cursor.execute(update_q, [movimento.categoria_id, movimento.id])
+        movimento.categoria_id, movimento.sottocategoria_id = assign_category(movimento)
+        update_q = 'update movimenti set categoria_id = %s, sottocategoria_id=%s where id = %s'
+        cursor.execute(update_q, [movimento.categoria_id,movimento.sottocategoria_id, movimento.id])
     mysql.connection.commit()
     cursor.close()
     return jsonify('OK')
