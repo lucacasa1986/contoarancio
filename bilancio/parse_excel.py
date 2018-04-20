@@ -81,6 +81,7 @@ class Movimento(object):
         self.data_contabile = None
         self.row_hash = None
         self.categoria_id = None
+        self.sottocategoria_id = None
         self.tags = []
 
     def __str__(self):
@@ -636,7 +637,8 @@ def get_movimenti(conto_id):
         data_movimento,
         importo,
         row_hash,
-        categoria_id
+        categoria_id,
+        sottocategoria_id
         from movimenti where data_movimento between %s and %s and conto_id = %s
     """
 
@@ -660,6 +662,7 @@ def get_movimenti(conto_id):
         movimento.amount = row["importo"]
         movimento.categoria_id = row["categoria_id"]
         movimento.row_hash = row["row_hash"]
+        movimento.sottocategoria_id = row["sottocategoria_id"]
         movimento.tags = load_tags_for_movimento(movimento.id)
         movimenti.append(movimento)
     return jsonify([m.__dict__ for m in movimenti])
@@ -674,9 +677,12 @@ def update_movimento():
 
     cursor = mysql.connection.cursor()
     cursor.execute("""
-                      UPDATE movimenti set categoria_id = %s where id=%s
+                      UPDATE movimenti set categoria_id = %s,
+                      sottocategoria_id = %s where id=%s
                     """,
-                   [movimento["categoria_id"], movimento["id"]])
+                   [movimento["categoria_id"],
+                    movimento["sottocategoria_id"],
+                    movimento["id"]])
     mysql.connection.commit()
     cursor.close()
     return str(movimento.get("id"))
@@ -704,6 +710,7 @@ order by categorie.id
     for e in cursor:
         categoria_id = e["id"]
         if current_categoria_id is None or categoria_id != current_categoria_id:
+            current_categoria_id = categoria_id
             # nuova categoria
             categoria = {
                 "id": e["id"],
@@ -803,7 +810,7 @@ def remove_tag(movimento_id, tag_value):
 def get_rules():
     cursor = mysql.connection.cursor()
     cursor.execute(
-        'select id, category_id, name from regole')
+        'select id, category_id, subcategory_id, name from regole')
     rules = cursor.fetchall()
     for rule in rules:
         # get conditions
@@ -822,8 +829,9 @@ def save_rule():
     cursor = mysql.connection.cursor()
     if rule["id"]:
         cursor.execute(
-            'update regole set category_id=%s, name=%s  '
-            'where id = %s', [rule["category_id"], rule["name"], rule["id"]])
+            'update regole set category_id=%s, subcategory_id=%s, name=%s  '
+            'where id = %s', [rule["category_id"], rule["subcategory_id"],
+                              rule["name"], rule["id"]])
 
         cursor.execute(
             'delete from regole_condizione where regola_id = %s',
@@ -842,8 +850,9 @@ def save_rule():
 
     else:
         cursor.execute(
-            'insert into regole(category_id, name)  '
-            'value(%s, %s)', [rule["category_id"], rule["name"]])
+            'insert into regole(category_id, subcategory_id, name)  '
+            'value(%s, %s)', [rule["category_id"], rule["subcategory_id"],
+                              rule["name"]])
 
         rule_id = cursor.lastrowid
         for condition in rule["conditions"]:
