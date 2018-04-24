@@ -293,6 +293,76 @@ def convert_html_to_xls(filename, tipo):
     return tmp_filename
 
 
+def parse_movimenti_conto_mps(conto_id, sheet):
+    movimenti = []
+    cursor = mysql.connection.cursor()
+    # find beignning of file
+    for rowindex in range(0, sheet.nrows):
+        check_val = sheet.cell_value(rowindex, 1)
+        if check_val == 'DATA CONT.':
+            starting_row_index = rowindex
+            break
+
+    if starting_row_index:
+        for rowindex in range(starting_row_index+1, sheet.nrows):
+            check_val = sheet.cell_value(rowindex, 1)
+            if not check_val:
+                break
+            movimento = Movimento()
+            try:
+                movimento.date = xldate_as_datetime(sheet.cell_value(rowindex, 2),
+                                                    datemode=0)
+            except:
+                date_str = sheet.cell_value(rowindex, 2)
+                movimento.date = datetime.strptime(date_str, '%d/%m/%Y')
+
+            try:
+                movimento.data_contabile = xldate_as_datetime(
+                    sheet.cell_value(rowindex, 1),
+                    datemode=0)
+            except:
+                date_str = sheet.cell_value(rowindex, 1)
+                movimento.data_contabile = datetime.strptime(date_str, '%d/%m/%Y')
+
+            movimento.type = sheet.cell_value(rowindex, 3)
+            if movimento.type == 'CARTA CREDITO ING DIRECT':
+                continue
+            movimento.description = sheet.cell_value(rowindex, 4)
+            movimento.amount = sheet.cell_value(rowindex, 5)
+
+            movimento.compute_hash()
+
+            cursor.execute('select id from movimenti where row_hash = %s',
+                           [movimento.row_hash])
+            rec = cursor.fetchone()
+            if not rec:
+                movimento.categoria_id, movimento.sottocategoria_id = assign_category(
+                    movimento)
+                cursor.execute("""
+                              INSERT INTO movimenti (tipo,
+                               descrizione, 
+                               data_movimento,
+                               importo,
+                               row_hash,
+                               categoria_id,
+                               sottocategoria_id,
+                               conto_id) 
+                              VALUES (%s, %s, %s, %s, %s, %s,%s, %s)
+                              """,
+                               [movimento.type, movimento.description,
+                                movimento.date, movimento.amount,
+                                movimento.row_hash, movimento.categoria_id,
+                                movimento.sottocategoria_id,
+                                conto_id])
+                movimento.id = cursor.lastrowid
+                movimenti.append(movimento)
+            else:
+                print('Movimento già caricato')
+    mysql.connection.commit()
+    cursor.close()
+    return movimenti
+
+
 def parse_movimenti_conto(conto_id, sheet):
     movimenti = []
     cursor = mysql.connection.cursor()
@@ -441,6 +511,8 @@ def parse_file(conto_id):
 
         if not tipo_movimenti or tipo_movimenti == 'CONTO':
             movimenti = parse_movimenti_conto(conto_id, sheet)
+        elif tipo_movimenti == 'CONTO_MPS':
+            moviment = parse_movimenti_conto_mps(conto_id, sheet)
         elif tipo_movimenti == 'CARTA':
             movimenti = parse_movimenti_carta(conto_id, sheet)
 
