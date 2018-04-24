@@ -760,10 +760,11 @@ def update_movimento():
     cursor = mysql.connection.cursor()
     cursor.execute("""
                       UPDATE movimenti set categoria_id = %s,
-                      sottocategoria_id = %s where id=%s
+                      sottocategoria_id = %s, ignored=%s where id=%s
                     """,
                    [movimento["categoria_id"],
                     movimento["sottocategoria_id"],
+                    movimento.get("ignored", False),
                     movimento["id"]])
     mysql.connection.commit()
     cursor.close()
