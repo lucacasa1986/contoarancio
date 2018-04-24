@@ -328,7 +328,7 @@ def parse_movimenti_conto_mps(conto_id, sheet):
             if movimento.type == 'CARTA CREDITO ING DIRECT':
                 continue
             movimento.description = sheet.cell_value(rowindex, 4)
-            movimento.amount = sheet.cell_value(rowindex, 5)
+            movimento.amount = sheet.cell_value(rowindex, 6)
 
             movimento.compute_hash()
 
