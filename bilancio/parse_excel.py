@@ -82,6 +82,7 @@ class Movimento(object):
         self.row_hash = None
         self.categoria_id = None
         self.sottocategoria_id = None
+        self.ignored = False
         self.tags = []
 
     def __str__(self):
@@ -575,7 +576,7 @@ def get_andamento(conto_id):
     select sum(importo) as partenza
     from movimenti
     where conto_id = %s
-    and data_movimento <= %s
+    and data_movimento <= %s and ignored is FALSE
     """
 
     cursor.execute(starting_value_q, [conto_id, from_date])
@@ -594,6 +595,7 @@ def get_andamento(conto_id):
             from movimenti
             where conto_id = %s
             and data_movimento > %s and data_movimento <= %s
+            and ignored is FALSE
             group by data_movimento
         """
     params = [conto_id, from_date, to_date]
@@ -644,6 +646,7 @@ def get_per_categoria(conto_id):
     from movimenti inner join categorie on movimenti.categoria_id = categorie.id
     where categoria_id is not null and movimenti.conto_id = %s
     and movimenti.data_movimento > %s and movimenti.data_movimento <= %s
+    and movimenti.ignored is FALSE
     """
 
     params = [conto_id, from_date, to_date]
@@ -718,6 +721,7 @@ def get_movimenti(conto_id):
         categoria_id,
         sottocategoria_id
         from movimenti where data_movimento between %s and %s and conto_id = %s
+        and ignored is FALSE 
     """
 
     if categories:
@@ -974,7 +978,7 @@ def save_rule():
 @jwt_required()
 def apply_rules(conto_id):
     cursor = mysql.connection.cursor()
-    query = " select * from movimenti where conto_id = %s"
+    query = " select * from movimenti where conto_id = %s and ignored is FALSE"
     cursor.execute(query, [conto_id])
     movimenti_rows = cursor.fetchall()
     for row in movimenti_rows:
