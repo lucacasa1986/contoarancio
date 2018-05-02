@@ -798,7 +798,7 @@ def split_movimento():
 
     for nuovo_movimento in altre_categorie:
         m =  movimento_orig.copy()
-        m["amount"] = nuovo_movimento["amount"]
+        m["importo"] = nuovo_movimento["amount"]
 
         m["categoria_id"] = nuovo_movimento["category"]["id"]
         if nuovo_movimento['subCategory']:
@@ -816,8 +816,8 @@ def split_movimento():
                                conto_id)
                               VALUES (%s, %s, %s, %s, %s, %s,%s, %s)
                               """,
-                       [m["type"], m["description"],
-                        m["date"], m["amount"],
+                       [m["tipo"], m["descrizione"],
+                        m["data_movimento"], m["importo"],
                         None, m["categoria_id"],
                         m["sottocategoria_id"],
                         conto_id])
