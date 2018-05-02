@@ -956,7 +956,7 @@ def save_rule():
     else:
         cursor.execute(
             'insert into regole(category_id, subcategory_id, name)  '
-            'value(%s, %s)', [rule["category_id"], rule["subcategory_id"],
+            'value(%s, %s, %s)', [rule["category_id"], rule["subcategory_id"],
                               rule["name"]])
 
         rule_id = cursor.lastrowid
