@@ -797,14 +797,16 @@ def split_movimento():
                     movimento["id"]])
 
     for nuovo_movimento in altre_categorie:
-        m =  movimento_orig.copy()
-        m["importo"] = nuovo_movimento["amount"]
-
-        m["categoria_id"] = nuovo_movimento["category"]["id"]
+        m = Movimento()
+        m.amount = nuovo_movimento["amount"]
+        m.categoria_id = nuovo_movimento["category"]["id"]
         if nuovo_movimento['subCategory']:
-            m["sottocategoria_id"] = nuovo_movimento["subCategory"]["id"]
-        else:
-            m["sottocategoria_id"] = None
+            m.sottocategoria_id = nuovo_movimento["subCategory"]["id"]
+        m.date = nuovo_movimento["data_movimento"]
+        m.description = nuovo_movimento["descrizione"]
+        m.type = nuovo_movimento["tipo"]
+        m.data_contabile = nuovo_movimento["data_movimento"]
+        m.compute_hash()
         cursor.execute("""
                               INSERT INTO movimenti (tipo,
                                descrizione,
@@ -816,10 +818,10 @@ def split_movimento():
                                conto_id)
                               VALUES (%s, %s, %s, %s, %s, %s,%s, %s)
                               """,
-                       [m["tipo"], m["descrizione"],
-                        m["data_movimento"], m["importo"],
-                        None, m["categoria_id"],
-                        m["sottocategoria_id"],
+                       [m.type, m.description,
+                        m.date, m.amount,
+                        m.row_hash, m.categoria_id,
+                        m.sottocategoria_id,
                         conto_id])
 
     mysql.connection.commit()
