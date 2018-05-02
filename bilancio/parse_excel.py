@@ -771,6 +771,58 @@ def update_movimento():
     return str(movimento.get("id"))
 
 
+@app.route("/api/movimento", methods=['POST'])
+@jwt_required()
+def split_movimento():
+    """ Splitta il movimento su più cataegoire
+    ( di fatto, crea dei nuovi movimenti)"""
+    data = request.get_json(force=True)
+    movimento = data["movimento"]
+    altre_categorie = data["others"]
+    conto_id = data["conto_id"]
+    if not movimento.get("id"):
+        return "Errore, manca id movimento"
+
+    cursor = mysql.connection.cursor()
+    cursor.execute("select * from movimenti where id=%s", [movimento["id"]])
+    movimento_orig = cursor.fetchone()
+
+    cursor.execute("""
+                      UPDATE movimenti set categoria_id = %s,
+                      sottocategoria_id = %s, importo=%s where id=%s
+                    """,
+                   [movimento["categoria_id"],
+                    movimento["sottocategoria_id"],
+                    movimento["amount"],
+                    movimento["id"]])
+
+    for nuovo_movimento in altre_categorie:
+        m =  movimento_orig.copy()
+        m["amount"] = nuovo_movimento["amount"]
+        m["categoria_id"] = nuovo_movimento["categoria_id"]
+        m["sottocategoria_id"] = nuovo_movimento["sottocategoria_id"]
+        cursor.execute("""
+                              INSERT INTO movimenti (tipo,
+                               descrizione,
+                               data_movimento,
+                               importo,
+                               row_hash,
+                               categoria_id,
+                               sottocategoria_id,
+                               conto_id)
+                              VALUES (%s, %s, %s, %s, %s, %s,%s, %s)
+                              """,
+                       [m["type"], m["description"],
+                        m["date"], m["amount"],
+                        None, m["categoria_id"],
+                        m["sottocategoria_id"],
+                        conto_id])
+
+    mysql.connection.commit()
+    cursor.close()
+    return "OK"
+
+
 @app.route("/api/categories", methods=['GET'])
 def get_all_categories():
     cursor = mysql.connection.cursor()
