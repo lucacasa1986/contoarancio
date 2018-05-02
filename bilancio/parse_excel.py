@@ -799,8 +799,12 @@ def split_movimento():
     for nuovo_movimento in altre_categorie:
         m =  movimento_orig.copy()
         m["amount"] = nuovo_movimento["amount"]
-        m["categoria_id"] = nuovo_movimento["categoria_id"]
-        m["sottocategoria_id"] = nuovo_movimento["sottocategoria_id"]
+
+        m["categoria_id"] = nuovo_movimento["category"]["id"]
+        if nuovo_movimento['subCategory']:
+            m["sottocategoria_id"] = nuovo_movimento["subCategory"]["id"]
+        else:
+            m["sottocategoria_id"] = None
         cursor.execute("""
                               INSERT INTO movimenti (tipo,
                                descrizione,
