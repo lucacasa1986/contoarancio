@@ -802,10 +802,10 @@ def split_movimento():
         m.categoria_id = nuovo_movimento["category"]["id"]
         if nuovo_movimento['subCategory']:
             m.sottocategoria_id = nuovo_movimento["subCategory"]["id"]
-        m.date = nuovo_movimento["data_movimento"]
-        m.description = nuovo_movimento["descrizione"]
-        m.type = nuovo_movimento["tipo"]
-        m.data_contabile = nuovo_movimento["data_movimento"]
+        m.date = movimento_orig["data_movimento"]
+        m.description = movimento_orig["descrizione"]
+        m.type = movimento_orig["tipo"]
+        m.data_contabile = movimento_orig["data_movimento"]
         m.compute_hash()
         cursor.execute("""
                               INSERT INTO movimenti (tipo,
