@@ -779,7 +779,6 @@ def split_movimento():
     data = request.get_json(force=True)
     movimento = data["movimento"]
     altre_categorie = data["others"]
-    conto_id = data["conto_id"]
     if not movimento.get("id"):
         return "Errore, manca id movimento"
 
@@ -822,7 +821,7 @@ def split_movimento():
                         m.date, m.amount,
                         m.row_hash, m.categoria_id,
                         m.sottocategoria_id,
-                        conto_id])
+                        movimento_orig["conto_id"]])
 
     mysql.connection.commit()
     cursor.close()
