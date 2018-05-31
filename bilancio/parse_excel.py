@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from flask_mysqldb import MySQL
 from flask_bcrypt import Bcrypt
 from flask_jwt import JWT, JWTError, jwt_required, current_identity
+from flask_cors import CORS
 import pandas as pd
 
 ALLOWED_EXTENSIONS = {'xls', 'xlsx'}
@@ -29,7 +30,7 @@ app.config.from_envvar('CONTOARANCIO_SETTINGS', silent=True)
 
 mysql = MySQL(app)
 bcrypt = Bcrypt(app)
-
+CORS(app)
 
 class User(object):
     def __init__(self, id, password):
